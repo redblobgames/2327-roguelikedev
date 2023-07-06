@@ -1,0 +1,125 @@
+#+title: Summer Roguelike project
+#+date: <2023-06-26 Mon>
+#+options: toc:nil
+
+Each summer r/roguelikedev has a [[https://old.reddit.com/r/roguelikedev/wiki/python_tutorial_series][summer event]] in which we all make a simple roguelike, roughly following the libtcod roguelike tutorial. [[href:/x/2226-roguelike-dev/][Last year I tried to clone Dwarf Fortress]] in 40 hours. That was too ambitious. But I did enjoy working on a "fortress mode" project more than an "adventure mode" project, so I'd like to do something like that this year, but with a smaller scope.
+
+#+TOC: headlines 2
+
+Unlike a typical "fortress mode" game, I want to have an end to the game. This is inspired by Against the Storm, which lets you build a town but then you win or lose, and you start another town. But I don't really know how to do this right now, so I'm going to go ahead and implement parts of the game and hope to figure it out later.
+
+The main idea right now is that the wilderness is all accessible at the beginning.  You can use natural resources at small scales. But to advance, you need to set up rooms to refine and process resources. Last year, building rooms and walls tile by tile is what doomed my project. This year, all the rooms will already exist in the dungeon. You'll claim and populate them.
+
+[[https://github.com/redblobgames/2327-roguelikedev][Github Repo]].
+
+* Setting up
+:PROPERTIES:
+:UNNUMBERED: t
+:SECTION_NUMBER: 0
+:CUSTOM_ID: setting-up
+:END:
+
+Since I'm participating in the Roguelikedev summer event, I'm going to /try/ to follow the same section numbers as the original Python tutorial, even though it's an "adventure mode" game and I'm not making a game like that.
+
+Last year I said I feel like a JavaScript project is easier to set up than a Python project, and I continue to feel that way. I did use a build step last year, but it's not necessary to do that, and most of my projects don't use a build step.
+
+* Moving around
+:PROPERTIES:
+:CUSTOM_ID: moving-around
+:END:
+
+Last year I was trying to make a Factorio-like interface where you walk around with a character using your keyboard, even though you're building a base. I decided that it didn't work well. So this year I'm going to try a more conventional mouse-based map scrolling interface.
+
+* Entity, render, map
+:PROPERTIES:
+:CUSTOM_ID: entity-render-map
+:END:
+
+* Generating a map
+:PROPERTIES:
+:CUSTOM_ID: generating-a-map
+:END:
+
+I liked the left/right nature of the map last year, and I want to do that again. I'll put the wilderness on the left and the dungeon rooms on the right.
+
+The dungeon rooms will come from the offgrid algorithm that Chris Cox sent me. It's only ~20 lines of code.
+
+Last year I used thin walls. I think this year I'll go back to thick walls.
+
+* Field of view
+:PROPERTIES:
+:CUSTOM_ID: field-of-view
+:END:
+
+Last year I made everything visible. This year though, I want the player to unlock rooms as you go through the game, so those rooms won't be visible until you open them up.
+
+* Placing enemies
+:PROPERTIES:
+:CUSTOM_ID: placing-enemies
+:END:
+
+Instead of enemies, I have lots of friendly NPCs. They need to have motivations, jobs, inventory, etc.
+
+* Combat
+:PROPERTIES:
+:CUSTOM_ID: combat
+:END:
+
+* Interface
+:PROPERTIES:
+:CUSTOM_ID: interface
+:END:
+
+* Items and inventory
+:PROPERTIES:
+:CUSTOM_ID: items-and-inventory
+:END:
+
+* Ranged scrolls and targeting
+:PROPERTIES:
+:CUSTOM_ID: ranged-scrolls-and-targeting
+:END:
+
+* Saving and loading
+:PROPERTIES:
+:CUSTOM_ID: saving-and-loading
+:END:
+
+* Dungeon levels
+:PROPERTIES:
+:CUSTOM_ID: dungeon-levels
+:END:
+
+* Increasing difficulty
+:PROPERTIES:
+:CUSTOM_ID: increasing-difficulty
+:END:
+
+* Gearing up
+:PROPERTIES:
+:CUSTOM_ID: gearing-up
+:END:
+
+* Conclusion
+:PROPERTIES:
+:UNNUMBERED: t
+:CUSTOM_ID: conclusion
+:END:
+
+#+begin_export html
+<figure>
+</figure>
+#+end_export
+
+Source: [[file:roguelike-dev.js]]
+
+#+begin_export html
+<x:head>
+  <script type="module" src="roguelike-dev.js"></script>
+  <script defer="defer" src="build/_bundle.js"></script>
+</x:head>
+<x:footer>
+  Created 26 Jun 2023; &#160;
+  <!-- hhmts start -->Last modified: 06 Jul 2023<!-- hhmts end -->
+</x:footer>
+#+end_export

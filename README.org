@@ -1,0 +1,12 @@
+[[http://unmaintained.tech/badge.svg]]
+
+Each summer, the [[https://old.reddit.com/r/roguelikedev/][r/roguelikedev]] community has a [[https://old.reddit.com/r/roguelikedev/wiki/python_tutorial_series][tutorial series]] where we all follow along to build a roguelike.  I previously participated:
+
+- 2018 - Rust instead of Python. Didn't get very far, and didn't post about it.
+- [[https://www.redblobgames.com/x/2025-roguelike-dev/][2020]] - JavaScript instead of Python, but followed the tutorial closely. Unlike some of the other JavaScript projects, I didn't use node.js or a build step like webpack. It's one html file and one js file included with a =<script>= tag. This is how I prefer to code small projects, and only switch to more organization once the project gets larger.
+- [[https://www.redblobgames.com/x/2126-roguelike-dev/][2021]] - TypeScript. Deviated from the tutorial by implementing graphical tiles, thin walls, inventory ui, doors, a different map generator, perspective view, light levels, simple animations, multiple objects per tile.
+- [[https://www.redblobgames.com/x/2226-roguelike-dev/][2022]] - TypeScript. Deviated a lot more from the tutorial by implementing friendly NPCs, a job system, wilderness renewable resources, and generally following a "fortress mode" instead of "adventure mode" design.
+
+For 2023, I again want to try a "fortress mode" but with a less ambitious game design. [[https://www.redblobgames.com/x/2327-roguelike-dev/][Diary + playable in browser]] and [[https://github.com/redblobgames/2327-roguelikedev][github repo]].
+
+If you want to build this yourself you'll need to download the sprites from [[https://game-icons.net/][game-icons.net]] and put them into the =game-icons/= folder.
