@@ -32,7 +32,43 @@ Last year I said I feel like a JavaScript project is easier to set up than a Pyt
 
 Last year I was trying to make a Factorio-like interface where you walk around with a character using your keyboard, even though you're building a base. I decided that it didn't work well. So this year I'm going to try a more conventional mouse-based map scrolling interface. Left mouse drag will scroll the map.
 
-I will experiment with some unconventional interface ideas too. In particular, I want to try making something trackpad friendly, requiring only the left button, but then using /keys/ to modify the mouse action. For example, instead of clicking through a menu to select "storage area" and then going into a "storage area marking mode", I might try “hold down ~S~ while dragging a rectangle". This wouldn't require navigating menus. The mode is activated while you hold down the key and the rectangle ends when you release the key. I don't know whether I'll like this until I try it.
+#+begin_export html
+<figure>
+<img src="blog/1-scrolling-screenshot.png" alt="Screenshot of game map" />
+<figcaption>Part 1: scrollable map</figcaption>
+</figure>
+#+end_export
+
+I used the drag code from [[href:/making-of/draggable/][my draggable object guide]] to move the /camera/ position. But how do I calculate the view from that? The view is a rectangle centered on the camera position.
+
+#+begin_export html
+<figure>
+<img src="blog/1-scrolling-view.png" alt="Diagram showing the scrollable view area" />
+<figcaption>Scrolling calculation: view box</figcaption>
+</figure>
+#+end_export
+
+The top left of that rectangle is the /offset/ for drawing to the screen. To find the top left, I take the camera position and subtract /half/ the view box size. Then I take the world coordinates of whatever I'm drawing and /subtract/ the offset to the top left corner. If the object is at (50, 35) in the world, and the top left corner of the view box is at (50, 35), then I want to draw the object at (0, 0) on the screen.
+
+#+begin_export html
+<figure>
+<img src="blog/1-scrolling-offset.png" alt="Diagram showing the offset calculation" />
+<figcaption>Scrolling calculation: offset</figcaption>
+</figure>
+#+end_export
+
+The second thing I wanted to do here was to /constrain/ the camera position to places where the map would be in view. Think about where the view box can be, and then where the camera position can be:
+
+#+begin_export html
+<figure>
+<img src="blog/1-scrolling-camera-positions.png" alt="Diagram showing where the camera can be placed" />
+<figcaption>Scrolling calculation: camera position</figcaption>
+</figure>
+#+end_export
+
+The camera's position is restricted to a rectangle the size of the map, but shrunk by a /half view box/ at each corner. This will keep the view inside the map region. A little detail: I added a slight margin to this calculation so that you can go outside the map region just a tiny bit. This adds a visual border to show that you're at the edge of the map.
+
+For the other controls, I want to try making something trackpad friendly, requiring only the left button, but then using /keys/ to modify the mouse action. For example, instead of clicking through a menu to select "storage area" and then going into a "storage area marking mode", I might try “hold down ~S~ while dragging a rectangle". This wouldn't require navigating menus. The mode is activated while you hold down the key and the rectangle ends when you release the key. I don't know whether I'll like this until I try it.
 
 * Entity, render, map
 :PROPERTIES:
