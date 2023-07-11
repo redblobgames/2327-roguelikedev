@@ -9,12 +9,6 @@ const DEBUG = false;
 function clamp(x, lo, hi) { return x < lo ? lo : x > hi ? hi : x; }
 
 
-let camera = {
-    x: 0,
-    y: 0,
-    zoom: 1,
-};
-
 // Drawing area
 /** @type {HTMLCanvasElement} */
 export const canvas = document.querySelector("#game");
@@ -46,6 +40,10 @@ if (window.devicePixelRatio && window.devicePixelRatio !== 1) {
 //////////////////////////////////////////////////////////////////////
 // PLACEHOLDERS
 
+function setMessage(str) {
+    document.querySelector("#messages").textContent = str;
+}
+
 const simulation = {
     TICKS_PER_SECOND: 10,
     tickId: 0,
@@ -55,11 +53,26 @@ const simulation = {
 // Map
 
 const map = {
-    bounds: {left: -100, right: 100, top: -100, bottom: 100},
+    bounds: {left: 0, right: 100, top: 0, bottom: 30},
     tiles: {
-        get({x, y}) { return x < 0 || y < 0? 'void' : x < 20 + 10 * Math.cos(y*0.1)  ? 'river' : 'plains'; },
+        get({x, y}) { return x < 0 || y < 0 || x >= 100 | y >= 30 ? 'void' : x < 20 + 10 * Math.cos(y*0.1)  ? 'river' : 'plains'; },
     },
 };
+
+const camera = {
+    x: NaN,
+    y: NaN,
+    zoom: 1, // TODO
+    set(x, y) {
+        const halfwidth = Math.min(VIEWWIDTH, map.bounds.right - map.bounds.left) / 2;
+        const halfheight = Math.min(VIEWHEIGHT, map.bounds.bottom - map.bounds.top) / 2;
+        const margin = 0.33; // allow the camera to extend this many tiles past the map, to show that we're at the edge
+        this.x = clamp(x, map.bounds.left + halfwidth - margin, map.bounds.right - halfwidth + margin);
+        this.y = clamp(y, map.bounds.top + halfheight - margin, map.bounds.bottom - halfheight + margin);
+    },
+};
+camera.set(0, 0);
+
 
 //////////////////////////////////////////////////////////////////////
 // Rendering
@@ -90,28 +103,21 @@ const sprites = await (async function() {
 export function render() {
     const halfwidth = VIEWWIDTH / 2;
     const halfheight = VIEWHEIGHT / 2;
-    let offset = {
-        x: clamp(camera.x + 0.5,
-                 map.bounds.left + halfwidth,
-                 map.bounds.right - halfwidth + 1),
-        y: clamp(camera.y + 0.5,
-                 map.bounds.top + halfheight,
-                 map.bounds.bottom - halfheight + 1),
+
+    let view = {
+        left: Math.floor  (camera.x - halfwidth),
+        right: Math.ceil  (camera.x + halfwidth),
+        top: Math.floor   (camera.y - halfheight),
+        bottom: Math.ceil (camera.y + halfheight),
     };
 
-    const dx = halfwidth - offset.x;
-    const dy = halfheight - offset.y;
-    let view = {
-        left: Math.floor  (offset.x - halfwidth),
-        right: Math.ceil  (offset.x + halfwidth),
-        top: Math.floor   (offset.y - halfheight),
-        bottom: Math.ceil (offset.y + halfheight),
-    };
+    setMessage(`Camera ${camera.x},${camera.y} view ${view.left}:${view.right} x ${view.top}:${view.bottom}`);
     
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.save();
     ctx.scale(TILE_SIZE, TILE_SIZE);
-    ctx.translate(dx, dy);
+    ctx.translate(halfwidth, halfheight); // move from top left to center of screen
+    ctx.translate(-camera.x, -camera.y); // move center by the camera offset
 
     // Tile backgrounds
     const tileRenders = {
@@ -223,8 +229,7 @@ const main = {
         // why dividing by 2 makes this work
         let {x, y} = convertPixelToCanvasCoord(event);
         const {cx, cy, ox, oy} = this.dragState;
-        camera.x = cx + (ox - x)/TILE_SIZE/2;
-        camera.y = cy + (oy - y)/TILE_SIZE/2;
+        camera.set(cx + (ox - x)/TILE_SIZE/2, cy + (oy - y)/TILE_SIZE/2);
         render();
     },
     
@@ -232,6 +237,8 @@ const main = {
         if (document.hasFocus() && document.activeElement === canvas) {
             simulation.tickId++;
             render();
+        } else {
+            setMessage(`Click to focus`);
         }
         setTimeout(() => this.loop(), 1000/simulation.TICKS_PER_SECOND);
     }
