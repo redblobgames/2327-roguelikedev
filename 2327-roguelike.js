@@ -6,6 +6,8 @@
 
 const DEBUG = false;
 
+import {offgridCellToRect} from "./offgrid.js";
+
 function clamp(x, lo, hi) { return x < lo ? lo : x > hi ? hi : x; }
 
 
@@ -52,11 +54,27 @@ const simulation = {
 //////////////////////////////////////////////////////////////////////
 // Map
 
+/**
+ * @typedef {Object} Rect  - half-open intervals
+ * @property {number} left
+ * @property {number} right
+ * @property {number} top
+ * @property {number} bottom
+ */
+
+/**
+ * @typedef {Object} Room
+ * @property {boolean} unlocked
+ * @property {Rect} rect
+ */
+
+
 const map = {
     bounds: {left: 0, right: 100, top: 0, bottom: 30},
     tiles: {
         get({x, y}) { return x < 0 || y < 0 || x >= 100 | y >= 30 ? 'void' : x < 20 + 10 * Math.cos(y*0.1)  ? 'river' : 'plains'; },
     },
+    rooms: [], /** @type{Room[]} */
 };
 
 const camera = {
@@ -190,6 +208,31 @@ export function render() {
         }
     }
     */
+
+    /* draw rooms */
+    const SEED = 123456;
+    const EDGE = 0.1;
+    for (let q = 0; q < 3; q++) {
+        for (let r = 0; r < 10; r++) {
+            let rect = offgridCellToRect(q, r, SEED, EDGE);
+            let room = {
+                left: Math.round(rect.left * 12),
+                right: Math.round(rect.right * 12),
+                top: Math.round(rect.top * 5),
+                bottom: Math.round(rect.bottom * 5),
+            };
+            ctx.fillStyle = `hsla(${360 * rect.hash|0}, 50%, 50%, 0.8)`;
+            ctx.strokeStyle = "white";
+            ctx.lineWidth = 0.05;
+            ctx.beginPath();
+            ctx.rect(room.left+1, room.top+1, room.right-room.left-1, room.bottom-room.top-1);
+            ctx.fill();
+            ctx.stroke();
+        }
+        // TODO: need to place doors
+        // TODO: need to figure out boundary between indoor and outdoor
+        // NOTE: for now, don't have any outdoor rooms; it adds work without adding meaningful gameplay
+    }
     
     ctx.restore();
     

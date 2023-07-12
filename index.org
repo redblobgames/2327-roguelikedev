@@ -23,7 +23,7 @@ The main idea right now is that the wilderness is all accessible at the beginnin
 
 Since I'm participating in the Roguelikedev summer event, I'm going to /try/ to follow the same section numbers as the original Python tutorial, even though it's an "adventure mode" game and I'm not making a game like that.
 
-Last year I said I feel like a JavaScript project is easier to set up than a Python project, and I continue to feel that way. I did use a build step last year, but it's not necessary to do that, and most of my projects don't use a build step.
+Last year I said I feel like a JavaScript project is easier to set up than a Python project, and I continue to feel that way. I did use a build step last year, but it's not necessary to do that, and most of my projects don't use a build step. This year I'm going to start out without a build step, and only add one if I need to.
 
 * Moving around
 :PROPERTIES:
@@ -89,9 +89,7 @@ For the other controls, I want to try making something trackpad friendly, requir
 
 I liked the left/right nature of the map last year, and I want to do that again. I'll put the wilderness on the left and the dungeon rooms on the right.
 
-The dungeon rooms will come from the [[href:/x/2321-offgrid/][offgrid algorithm]] that Chris Cox sent me. It's only ~20 lines of code.
-
-Last year I used thin walls. I think they were neat, especially helping with player-built rooms. I don't have player-built rooms this year. I'll go back to thick walls.
+The dungeon rooms will come from the [[href:/x/2321-offgrid/][offgrid algorithm]] that Chris Cox sent me. It's only 20 lines of code. Last year I used thin walls. I think they were neat, especially helping with player-built rooms. I don't have player-built rooms this year. I'll go back to thick walls. Using the offgrid algorithm, I'll generate =left=, =right=, =top=, =bottom= for each room. These are half-open intervals, so ~left <= x < right~ and ~top <= y < bottom~. But I also need to reserve one tile for the thick walls, so I'll use ~left < x < right~ and ~top < y < bottom~.
 
 * Field of view
 :PROPERTIES:
@@ -176,6 +174,6 @@ As much as it might be fun to have gear for the colonists, I am going to skip th
 #+begin_export html
 <x:footer>
   Created 26 Jun 2023; &#160;
-  <!-- hhmts start -->Last modified: 10 Jul 2023<!-- hhmts end -->
+  <!-- hhmts start -->Last modified: 11 Jul 2023<!-- hhmts end -->
 </x:footer>
 #+end_export
