@@ -52,7 +52,7 @@ function box_random( x, y, seed, edge ) {
  * @param {number} y - integer grid cell
  * @param {number} seed - for the random number generator
  * @param {number} edge - from 0.0 to 0.5
- * @return {{left, top, right, bottom}} rectangle
+ * @return {{left, top, right, bottom, hash, parity}} rectangle
  */
 export function offgridCellToRect(x, y, seed, edge) {
     // checkerboard even and odd, vertical and horizontal limits
