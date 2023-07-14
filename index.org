@@ -104,7 +104,16 @@ The next step was to place the walls. There are two parts to this:
 2. All tiles to the /left/ of the leftmost room are walkable. This handles the wilderness areas.
 3. If there's no leftmost room on a row, use a default border between wilderness and mountain.
 
-TODO: DOORS
+The next step after that is doors. I had [[href:/x/1939-planetary-dungeon/#doors][previously written a door algorithm]] that looks at all tiles that have two adjacent room tiles and two adjacent wall tiles. That algorithm would work here. But I can use something similar. Since my rooms are generated from a grid (using the offgrid algorithm), I can use that original grid to find adjacent rooms. For each room, I pick a random tile on the west wall for a door, and I pick a random tile on the north wall for a door, unless the room is in the topmost row. This produces plenty of connectivity, perhaps too much for a traditional adventure mode dungeon, but probably just fine for a colony simulator:
+
+#+begin_export html
+<figure>
+  <img src="blog/3-map-with-doors.png" alt="Screenshot showing door placement" />
+  <figcaption>Generated map doors between rooms, and doors on the left</figcaption>
+</figure>
+#+end_export
+
+This produces a way to go from the wilderness into the dungeon, and a way to go from dungeon rooms to adjacent rooms.
 
 * Field of view
 :PROPERTIES:
@@ -189,6 +198,6 @@ As much as it might be fun to have gear for the colonists, I am going to skip th
 #+begin_export html
 <x:footer>
   Created 26 Jun 2023; &#160;
-  <!-- hhmts start -->Last modified: 13 Jul 2023<!-- hhmts end -->
+  <!-- hhmts start -->Last modified: 14 Jul 2023<!-- hhmts end -->
 </x:footer>
 #+end_export

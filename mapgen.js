@@ -88,12 +88,13 @@ function generateRooms(bounds) {
     return {roomCols, roomRows, rooms, walkable};
 }
 
-function addDoors(roomRows, roomCols, rooms, walkable) {
+function addDoors(roomRows, roomCols, rooms) {
     // Underlying the offgrid rooms is an original grid with q,r
     // coordinates. Each room gets connected to the four rooms
     // adjacent to it on the original grid
 
     function roomAt(q, r) { return rooms.find((room) => room.q === q && room.r === r); }
+    let doors = new Set();
     
     for (let r = 0; r < roomRows; r++) {
         for (let q = 0; q < roomCols; q++) {
@@ -106,7 +107,11 @@ function addDoors(roomRows, roomCols, rooms, walkable) {
             let top = Math.max(room.rect.top, leftRoom.rect.top);
             let bottom = Math.min(room.rect.bottom, leftRoom.rect.bottom);
             let y = Math.round(lerp(top+1, bottom-1, room.hash));
-            walkable.add(tileId(x, y));
+            doors.add({
+                room1: room,
+                room2: leftRoom,
+                x, y
+            });
             
             // Dig door on top, except on the top row
             let topRoom = roomAt(q, r-1);
@@ -115,18 +120,23 @@ function addDoors(roomRows, roomCols, rooms, walkable) {
                 let left = Math.max(room.rect.left, topRoom.rect.left);
                 let right = Math.min(room.rect.right, topRoom.rect.right);
                 let x = Math.round(lerp(left+1, right-1, room.hash));
-                walkable.add(tileId(x, y));
+                doors.add({
+                    room1: room,
+                    room2: topRoom,
+                    x, y
+                });
             }
         }
     }
+
+    return {doors};
 }
 
 export function generateMap() {
     const bounds = {left: 0, right: 100, top: 0, bottom: 100};
 
     const {roomRows, roomCols, rooms, walkable} = generateRooms(bounds);
-
-    addDoors(roomRows, roomCols, rooms, walkable);
+    const {doors} = addDoors(roomRows, roomCols, rooms, walkable);
     
     return {
         bounds,
@@ -143,7 +153,6 @@ export function generateMap() {
         roomRows, roomCols,
         rooms,
         walkable,
+        doors,
     };
 }
-
-

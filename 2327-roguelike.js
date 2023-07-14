@@ -155,38 +155,27 @@ export function render() {
 
     // Agents are drawn on top of most everything else (except the cursor)
     ctx.save();
-    /*
+
     ctx.lineJoin = 'bevel'; // some of the game-icons have sharp corners
-    for (let agent of simulation.agents) {
-        let {x, y} = agent.location;
+    for (let door of map.doors) {
+        let {x, y} = door;
         if (view.left <= x && x < view.right
             && view.top <= y && y < view.bottom) {
-            let color = "yellow";
-            if (agent.health < simulation.AGENT_HUNGRY) color = "orange";
-            if (agent.health < simulation.AGENT_STARVING) color = "red";
-            if (agent.health === 0) color = "black";
-            if (agent.health < 0) color = "purple"; // debugging
-            if (agent.dest && agent.health > 0) {
-                ctx.strokeStyle = "white";
-                ctx.lineWidth = 0.02;
-                ctx.beginPath();
-                ctx.moveTo(x + 0.5, y + 0.5);
-                ctx.lineTo(agent.dest.x + 0.5, agent.dest.y + 0.5);
-                ctx.stroke();
-            }
+            let color = `hsla(${360 * door.room1.hash|0}, 50%, 50%, 0.8)`;
             ctx.lineWidth = 1/(TILE_SIZE/512);
-            ctx.strokeStyle = "black";
-            drawTile(x, y, agent.appearance.sprite, color);
+            ctx.strokeStyle = "white";
+            drawTile(x, y, 'door', color);
+            /*
             ctx.font = '0.4px monospace';
             ctx.lineWidth = 2 / TILE_SIZE;
             ctx.fillStyle = "white";
             ctx.textAlign = 'center';
-            const label = agent.id.replace("agent-", "");
+            const label = "door";
             ctx.strokeText(label, x+0.5, y+0.9);
             ctx.fillText(label, x+0.5, y+0.9);
+            */
         }
     }
-    */
 
     /* draw rooms */
     for (let room of map.rooms) {
@@ -198,9 +187,6 @@ export function render() {
         ctx.fill();
         ctx.stroke();
     }
-    // TODO: need to place doors
-    // TODO: need to figure out boundary between indoor and outdoor
-    // NOTE: for now, don't have any outdoor rooms; it adds work without adding meaningful gameplay
     
     ctx.restore();
     
