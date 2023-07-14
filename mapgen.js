@@ -2,9 +2,12 @@
  * From https://www.redblobgames.com/x/2327-roguelike-dev/
  * Copyright 2023 Red Blob Games <redblobgames@gmail.com>
  * @license Apache-2.0 <https://www.apache.org/licenses/LICENSE-2.0.html>
+ *
+ * Map generation
  */
 
 import {offgridCellToRect} from "./offgrid.js";
+import {lerp} from "./util.js";
 
 /**
  * @typedef {Object} Rect  - half-open intervals
@@ -20,7 +23,7 @@ import {offgridCellToRect} from "./offgrid.js";
  * @property {Rect} rect
  */
 
-function toKey(x, y) {
+function tileId(x, y) {
     return `${x}:${y}`;
 }
 
@@ -43,9 +46,11 @@ function generateRooms(bounds) {
     for (let y = bounds.top; y < bounds.bottom; y++) {
         leftmostWall.set(y, bounds.left + ROOM_START_LEFT + ROOM_AVERAGE_WIDTH);
     }
-    
-    for (let r = 0; r < Math.floor((bounds.bottom - bounds.top) / ROOM_AVERAGE_HEIGHT) - 1; r++) {
-        for (let q = 0; q < Math.floor((bounds.right - bounds.left - ROOM_START_LEFT) / ROOM_AVERAGE_WIDTH - 1); q++) {
+
+    const roomRows = Math.floor((bounds.bottom - bounds.top) / ROOM_AVERAGE_HEIGHT) - 1;
+    const roomCols = Math.floor((bounds.right - bounds.left - ROOM_START_LEFT) / ROOM_AVERAGE_WIDTH - 1);
+    for (let r = 0; r < roomRows; r++) {
+        for (let q = 0; q < roomCols; q++) {
             let offgrid = offgridCellToRect(q, r, SEED, EDGE);
             let rect = {
                 left: bounds.left + ROOM_START_LEFT + Math.round(offgrid.left * ROOM_AVERAGE_WIDTH),
@@ -68,7 +73,7 @@ function generateRooms(bounds) {
             // Mark the interior of the room as walkable
             for (let y = rect.top + 1; y < rect.bottom; y++) {
                 for (let x = rect.left + 1; x < rect.right; x++) {
-                    walkable.add(toKey(x, y));
+                    walkable.add(tileId(x, y));
                 }
             }
         }
@@ -76,17 +81,52 @@ function generateRooms(bounds) {
 
     for (let y = bounds.top; y < bounds.bottom; y++) {
         for (let x = bounds.left; x < leftmostWall.get(y); x++) {
-            walkable.add(toKey(x, y));
+            walkable.add(tileId(x, y));
         }
     }
 
-    return {rooms, walkable};
+    return {roomCols, roomRows, rooms, walkable};
+}
+
+function addDoors(roomRows, roomCols, rooms, walkable) {
+    // Underlying the offgrid rooms is an original grid with q,r
+    // coordinates. Each room gets connected to the four rooms
+    // adjacent to it on the original grid
+
+    function roomAt(q, r) { return rooms.find((room) => room.q === q && room.r === r); }
+    
+    for (let r = 0; r < roomRows; r++) {
+        for (let q = 0; q < roomCols; q++) {
+            let room = roomAt(q, r);
+            
+            // Dig door on left, with the left column leading to the wilderness
+            let leftRoom = roomAt(q-1, r);
+            if (!leftRoom) leftRoom = {rect: {top: -Infinity, bottom: Infinity}}; // wilderness
+            let x = room.rect.left;
+            let top = Math.max(room.rect.top, leftRoom.rect.top);
+            let bottom = Math.min(room.rect.bottom, leftRoom.rect.bottom);
+            let y = Math.round(lerp(top+1, bottom-1, room.hash));
+            walkable.add(tileId(x, y));
+            
+            // Dig door on top, except on the top row
+            let topRoom = roomAt(q, r-1);
+            if (topRoom) {
+                let y = room.rect.top;
+                let left = Math.max(room.rect.left, topRoom.rect.left);
+                let right = Math.min(room.rect.right, topRoom.rect.right);
+                let x = Math.round(lerp(left+1, right-1, room.hash));
+                walkable.add(tileId(x, y));
+            }
+        }
+    }
 }
 
 export function generateMap() {
     const bounds = {left: 0, right: 100, top: 0, bottom: 100};
 
-    const {rooms, walkable} = generateRooms(bounds);
+    const {roomRows, roomCols, rooms, walkable} = generateRooms(bounds);
+
+    addDoors(roomRows, roomCols, rooms, walkable);
     
     return {
         bounds,
@@ -94,14 +134,15 @@ export function generateMap() {
             get({x, y}) {
                 if (x < bounds.left || x >= bounds.right
                     || y < bounds.top || y >= bounds.bottom) return 'void';
-                if (!walkable.has(toKey(x, y))) return 'void';
+                if (!walkable.has(tileId(x, y))) return 'void';
                 return x < 10 + 5 * Math.cos(y*0.1)
                     ? 'river'
                     : 'plains';
             },
         },
-        walkable,
+        roomRows, roomCols,
         rooms,
+        walkable,
     };
 }
 
