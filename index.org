@@ -87,9 +87,24 @@ For the other controls, I want to try making something trackpad friendly, requir
 :CUSTOM_ID: generating-a-map
 :END:
 
-I liked the left/right nature of the map last year, and I want to do that again. I'll put the wilderness on the left and the dungeon rooms on the right.
+I liked the left/right nature of the map last year, and I want to do that again. I'll put the wilderness on the left and the dungeon rooms on the right. I reserved the left side of the map for water, then wilderness. Then the rooms begin.
 
 The dungeon rooms will come from the [[href:/x/2321-offgrid/][offgrid algorithm]] that Chris Cox sent me. It's only 20 lines of code. Last year I used thin walls. I think they were neat, especially helping with player-built rooms. I don't have player-built rooms this year. I'll go back to thick walls. Using the offgrid algorithm, I'll generate =left=, =right=, =top=, =bottom= for each room. These are half-open intervals, so ~left <= x < right~ and ~top <= y < bottom~. But I also need to reserve one tile for the thick walls, so I'll use ~left < x < right~ and ~top < y < bottom~.
+
+#+begin_export html
+<figure>
+  <img src="blog/3-offgrid-map.png" alt="Screenshot" />
+  <figcaption>Generated map with water and land on the left, dungeon on the right</figcaption>
+</figure>
+#+end_export
+
+The next step was to place the walls. There are two parts to this:
+
+1. All tiles within a room are walkable.
+2. All tiles to the /left/ of the leftmost room are walkable. This handles the wilderness areas.
+3. If there's no leftmost room on a row, use a default border between wilderness and mountain.
+
+TODO: DOORS
 
 * Field of view
 :PROPERTIES:
@@ -174,6 +189,6 @@ As much as it might be fun to have gear for the colonists, I am going to skip th
 #+begin_export html
 <x:footer>
   Created 26 Jun 2023; &#160;
-  <!-- hhmts start -->Last modified: 11 Jul 2023<!-- hhmts end -->
+  <!-- hhmts start -->Last modified: 13 Jul 2023<!-- hhmts end -->
 </x:footer>
 #+end_export

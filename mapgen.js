@@ -20,10 +20,11 @@ import {offgridCellToRect} from "./offgrid.js";
  * @property {Rect} rect
  */
 
+function toKey(x, y) {
+    return `${x}:${y}`;
+}
 
-export function generateMap() {
-    const bounds = {left: 0, right: 100, top: 0, bottom: 30};
-
+function generateRooms(bounds) {
     const SEED = 123456;
     const EDGE = 0.1;
     const ROOM_START_LEFT = 20;
@@ -32,14 +33,25 @@ export function generateMap() {
     
     /** @type {Room[]} */
     let rooms = [];
-    for (let r = 0; r < 10; r++) {
-        for (let q = 0; q < 3; q++) {
+
+    // The walkable areas are computed in two different ways:
+    // 1. To the *left* of the leftmost room, all tiles are walkable.
+    //    I need to calculate the leftmost wall for this.
+    // 2. Within each room, all tiles are walkable.
+    let walkable = new Set();
+    let leftmostWall = new Map();
+    for (let y = bounds.top; y < bounds.bottom; y++) {
+        leftmostWall.set(y, bounds.left + ROOM_START_LEFT + ROOM_AVERAGE_WIDTH);
+    }
+    
+    for (let r = 0; r < Math.floor((bounds.bottom - bounds.top) / ROOM_AVERAGE_HEIGHT) - 1; r++) {
+        for (let q = 0; q < Math.floor((bounds.right - bounds.left - ROOM_START_LEFT) / ROOM_AVERAGE_WIDTH - 1); q++) {
             let offgrid = offgridCellToRect(q, r, SEED, EDGE);
             let rect = {
-                left: Math.round(offgrid.left * ROOM_AVERAGE_WIDTH),
-                right: Math.round(offgrid.right * ROOM_AVERAGE_WIDTH),
-                top: Math.round(offgrid.top * ROOM_AVERAGE_HEIGHT),
-                bottom: Math.round(offgrid.bottom * ROOM_AVERAGE_HEIGHT),
+                left: bounds.left + ROOM_START_LEFT + Math.round(offgrid.left * ROOM_AVERAGE_WIDTH),
+                right: bounds.left + ROOM_START_LEFT + Math.round(offgrid.right * ROOM_AVERAGE_WIDTH),
+                top: bounds.top + Math.round(offgrid.top * ROOM_AVERAGE_HEIGHT),
+                bottom: bounds.top + Math.round(offgrid.bottom * ROOM_AVERAGE_HEIGHT),
             };
             let room = {
                 q, r,
@@ -47,14 +59,48 @@ export function generateMap() {
                 hash: offgrid.hash,
             };
             rooms.push(room);
+
+            // Need to keep track of the leftmost wall for each row
+            for (let y = rect.top; y <= rect.bottom; y++) {
+                leftmostWall.set(y, Math.min(rect.left, leftmostWall.get(y)));
+            }
+            
+            // Mark the interior of the room as walkable
+            for (let y = rect.top + 1; y < rect.bottom; y++) {
+                for (let x = rect.left + 1; x < rect.right; x++) {
+                    walkable.add(toKey(x, y));
+                }
+            }
         }
     }
+
+    for (let y = bounds.top; y < bounds.bottom; y++) {
+        for (let x = bounds.left; x < leftmostWall.get(y); x++) {
+            walkable.add(toKey(x, y));
+        }
+    }
+
+    return {rooms, walkable};
+}
+
+export function generateMap() {
+    const bounds = {left: 0, right: 100, top: 0, bottom: 100};
+
+    const {rooms, walkable} = generateRooms(bounds);
     
     return {
         bounds,
         tiles: {
-            get({x, y}) { return x < 0 || y < 0 || x >= 100 | y >= 30 ? 'void' : x < 20 + 10 * Math.cos(y*0.1)  ? 'river' : 'plains'; },
+            get({x, y}) {
+                if (x < bounds.left || x >= bounds.right
+                    || y < bounds.top || y >= bounds.bottom) return 'void';
+                if (!walkable.has(toKey(x, y))) return 'void';
+                return x < 10 + 5 * Math.cos(y*0.1)
+                    ? 'river'
+                    : 'plains';
+            },
         },
+        walkable,
         rooms,
     };
 }
