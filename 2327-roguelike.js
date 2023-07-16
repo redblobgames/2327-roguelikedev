@@ -31,13 +31,10 @@ function convertPixelToCanvasCoord(event) {
 const TILE_SIZE = DEBUG? 12 : 25;
 const VIEWWIDTH = canvas.width / TILE_SIZE;
 const VIEWHEIGHT = canvas.height / TILE_SIZE;
+const CANVAS_SCALE = window.devicePixelRatio ?? 1; // Handle hi-dpi displays, but also responsive layout
+canvas.width *= CANVAS_SCALE;
+canvas.height *= CANVAS_SCALE;
 
-if (window.devicePixelRatio && window.devicePixelRatio !== 1) {
-    // Handle hi-dpi displays
-    canvas.width *= window.devicePixelRatio;
-    canvas.height *= window.devicePixelRatio;
-    ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
-}
 
 //////////////////////////////////////////////////////////////////////
 // PLACEHOLDERS
@@ -112,6 +109,7 @@ export function render() {
     
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.save();
+    ctx.scale(CANVAS_SCALE, CANVAS_SCALE);
     ctx.scale(TILE_SIZE, TILE_SIZE);
     ctx.translate(halfwidth, halfheight); // move from top left to center of screen
     ctx.translate(-camera.x, -camera.y); // move center by the camera offset
@@ -210,8 +208,7 @@ const main = {
     dragStart(event) {
         if (event.button !== 0) return; // left button only
         let {x, y} = convertPixelToCanvasCoord(event);
-        this.dragState = {cx: camera.x, cy: camera.y,
-                          ox: x, oy: y};
+        this.dragState = {cx: camera.x, cy: camera.y, ox: x, oy: y};
         event.currentTarget.setPointerCapture(event.pointerId);
     },
 
@@ -222,11 +219,10 @@ const main = {
     dragMove(event) {
         if (!this.dragState) return;
         // Invariant: I want the position under the cursor
-        // to stay the same tile. HACK: don't understand yet
-        // why dividing by 2 makes this work
+        // to stay the same tile.
         let {x, y} = convertPixelToCanvasCoord(event);
         const {cx, cy, ox, oy} = this.dragState;
-        camera.set(cx + (ox - x)/TILE_SIZE/2, cy + (oy - y)/TILE_SIZE/2);
+        camera.set(cx + (ox - x)/TILE_SIZE/CANVAS_SCALE, cy + (oy - y)/TILE_SIZE/CANVAS_SCALE);
         render();
     },
     
