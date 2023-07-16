@@ -4,17 +4,17 @@
  * @license Apache-2.0 <https://www.apache.org/licenses/LICENSE-2.0.html>
  */
 
-const DEBUG = true;
-
 import {generateMap} from "./mapgen.js";
-
-function clamp(x, lo, hi) { return x < lo ? lo : x > hi ? hi : x; }
+import {clamp} from "./util.js";
 
 
 // Drawing area
 /** @type {HTMLCanvasElement} */
 export const canvas = document.querySelector("#game");
 export const ctx = canvas.getContext('2d');
+const CANVAS_SCALE = window.devicePixelRatio ?? 1; // Handle hi-dpi displays, but also responsive layout
+canvas.width *= CANVAS_SCALE;
+canvas.height *= CANVAS_SCALE;
 
 /** Convert from event coordinate space (on the page) to Canvas coordinate
  * space (assuming there are no transforms on the canvas) */
@@ -27,13 +27,6 @@ function convertPixelToCanvasCoord(event) {
     };
 }
 
-// Tile map view -- TODO: should be zoomable
-const TILE_SIZE = DEBUG? 12 : 25;
-const VIEWWIDTH = canvas.width / TILE_SIZE;
-const VIEWHEIGHT = canvas.height / TILE_SIZE;
-const CANVAS_SCALE = window.devicePixelRatio ?? 1; // Handle hi-dpi displays, but also responsive layout
-canvas.width *= CANVAS_SCALE;
-canvas.height *= CANVAS_SCALE;
 
 
 //////////////////////////////////////////////////////////////////////
@@ -56,14 +49,20 @@ const map = generateMap();
 const camera = {
     x: NaN,
     y: NaN,
-    zoom: 1, // TODO
     set(x, y) {
-        const halfwidth = Math.min(VIEWWIDTH, map.bounds.right - map.bounds.left) / 2;
-        const halfheight = Math.min(VIEWHEIGHT, map.bounds.bottom - map.bounds.top) / 2;
+        const halfwidth = Math.min(this.VIEWWIDTH, map.bounds.right - map.bounds.left) / 2;
+        const halfheight = Math.min(this.VIEWHEIGHT, map.bounds.bottom - map.bounds.top) / 2;
         const margin = 0.33; // allow the camera to extend this many tiles past the map, to show that we're at the edge
         this.x = clamp(x, map.bounds.left + halfwidth - margin, map.bounds.right - halfwidth + margin);
         this.y = clamp(y, map.bounds.top + halfheight - margin, map.bounds.bottom - halfheight + margin);
     },
+    // For zooming:
+    _z: 4,
+    get z() { return this._z; },
+    set z(newZ) { this._z = clamp(newZ, 2, 10); },
+    get TILE_SIZE() { return 100 / this.z * CANVAS_SCALE; },
+    get VIEWWIDTH() { return canvas.width / this.TILE_SIZE; },
+    get VIEWHEIGHT() { return canvas.height / this.TILE_SIZE; },
 };
 camera.set(0, 0);
 
@@ -95,8 +94,8 @@ const sprites = await (async function() {
 
 
 export function render() {
-    const halfwidth = VIEWWIDTH / 2;
-    const halfheight = VIEWHEIGHT / 2;
+    const halfwidth = camera.VIEWWIDTH / 2;
+    const halfheight = camera.VIEWHEIGHT / 2;
 
     let view = {
         left: Math.floor  (camera.x - halfwidth),
@@ -105,12 +104,11 @@ export function render() {
         bottom: Math.ceil (camera.y + halfheight),
     };
 
-    setMessage(`Camera ${camera.x},${camera.y} view ${view.left}:${view.right} x ${view.top}:${view.bottom}`);
+    setMessage(`Camera ${camera.x.toFixed(2)},${camera.y.toFixed(2)} view ${view.left},${view.right} to ${view.top},${view.bottom}`);
     
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.save();
-    ctx.scale(CANVAS_SCALE, CANVAS_SCALE);
-    ctx.scale(TILE_SIZE, TILE_SIZE);
+    ctx.scale(camera.TILE_SIZE, camera.TILE_SIZE);
     ctx.translate(halfwidth, halfheight); // move from top left to center of screen
     ctx.translate(-camera.x, -camera.y); // move center by the camera offset
 
@@ -138,7 +136,7 @@ export function render() {
     
     ctx.save();
     ctx.lineJoin = 'bevel'; // some of the game-icons have sharp corners
-    ctx.lineWidth = 1/(TILE_SIZE/512);
+    ctx.lineWidth = 1/(camera.TILE_SIZE/512);
     ctx.strokeStyle = "black";
     for (let y = view.top; y < view.bottom; y++) {
         for (let x = view.left; x < view.right; x++) {
@@ -160,7 +158,7 @@ export function render() {
         if (view.left <= x && x < view.right
             && view.top <= y && y < view.bottom) {
             let color = `hsla(${360 * door.room1.hash|0}, 50%, 50%, 0.8)`;
-            ctx.lineWidth = 1/(TILE_SIZE/512);
+            ctx.lineWidth = 1/(camera.TILE_SIZE/512);
             ctx.strokeStyle = "white";
             drawTile(x, y, 'door', color);
             /*
@@ -200,6 +198,7 @@ const main = {
         canvas.addEventListener('pointerup',      (e) => this.dragEnd(e));
         canvas.addEventListener('pointercancel',  (e) => this.dragEnd(e));
         canvas.addEventListener('pointermove',    (e) => this.dragMove(e));
+        canvas.addEventListener('wheel',          (e) => this.onWheel(e));
         canvas.addEventListener('touchstart',     (e) => e.preventDefault());
     },
 
@@ -222,7 +221,17 @@ const main = {
         // to stay the same tile.
         let {x, y} = convertPixelToCanvasCoord(event);
         const {cx, cy, ox, oy} = this.dragState;
-        camera.set(cx + (ox - x)/TILE_SIZE/CANVAS_SCALE, cy + (oy - y)/TILE_SIZE/CANVAS_SCALE);
+        camera.set(cx + (ox - x)/camera.TILE_SIZE, cy + (oy - y)/camera.TILE_SIZE);
+        render();
+    },
+
+    onWheel(event) {
+        // NOTE: the deltaX, deltaY values are in the deltaMode units,
+        // which varies across browsers. The wheelDeltaX, wheelDeltaY
+        // are always in pixel units.
+        event.preventDefault();
+        // TODO: adjust based on the mouse position too
+        camera.z = camera.z - event.wheelDeltaY / 1000;
         render();
     },
     
