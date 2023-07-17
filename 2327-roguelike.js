@@ -4,9 +4,8 @@
  * @license Apache-2.0 <https://www.apache.org/licenses/LICENSE-2.0.html>
  */
 
-import {generateMap} from "./mapgen.js";
+import {Pos, generateMap} from "./mapgen.js";
 import {clamp} from "./util.js";
-
 
 // Drawing area
 /** @type {HTMLCanvasElement} */
@@ -36,9 +35,19 @@ function setMessage(str) {
     document.querySelector("#messages").textContent = str;
 }
 
+class Colonist {
+    constructor(pos) {
+        /** @type {Position} */
+        this.pos = pos;
+        /** @type {Position[]} - reverse order of tiles to visit */
+        this.path = [];
+    }
+}
+
 const simulation = {
     TICKS_PER_SECOND: 10,
     tickId: 0,
+    colonists: [new Colonist(20, 10)],
 };
 
 //////////////////////////////////////////////////////////////////////
@@ -47,14 +56,15 @@ const simulation = {
 const map = generateMap();
 
 const camera = {
-    x: NaN,
-    y: NaN,
+    pos: Pos(NaN, NaN),
     set(x, y) {
         const halfwidth = Math.min(this.VIEWWIDTH, map.bounds.right - map.bounds.left) / 2;
         const halfheight = Math.min(this.VIEWHEIGHT, map.bounds.bottom - map.bounds.top) / 2;
         const margin = 0.33; // allow the camera to extend this many tiles past the map, to show that we're at the edge
-        this.x = clamp(x, map.bounds.left + halfwidth - margin, map.bounds.right - halfwidth + margin);
-        this.y = clamp(y, map.bounds.top + halfheight - margin, map.bounds.bottom - halfheight + margin);
+        this.pos = Pos(
+            clamp(x, map.bounds.left + halfwidth - margin, map.bounds.right - halfwidth + margin),
+            clamp(y, map.bounds.top + halfheight - margin, map.bounds.bottom - halfheight + margin)
+        );
     },
     // For zooming:
     _z: 4,
@@ -98,19 +108,19 @@ export function render() {
     const halfheight = camera.VIEWHEIGHT / 2;
 
     let view = {
-        left: Math.floor  (camera.x - halfwidth),
-        right: Math.ceil  (camera.x + halfwidth),
-        top: Math.floor   (camera.y - halfheight),
-        bottom: Math.ceil (camera.y + halfheight),
+        left: Math.floor  (camera.pos.x - halfwidth),
+        right: Math.ceil  (camera.pos.x + halfwidth),
+        top: Math.floor   (camera.pos.y - halfheight),
+        bottom: Math.ceil (camera.pos.y + halfheight),
     };
 
-    setMessage(`Camera ${camera.x.toFixed(2)},${camera.y.toFixed(2)} view ${view.left},${view.right} to ${view.top},${view.bottom}`);
+    setMessage(`Camera ${camera.pos.x.toFixed(2)},${camera.pos.y.toFixed(2)} view ${view.left},${view.right} to ${view.top},${view.bottom}`);
     
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.save();
     ctx.scale(camera.TILE_SIZE, camera.TILE_SIZE);
     ctx.translate(halfwidth, halfheight); // move from top left to center of screen
-    ctx.translate(-camera.x, -camera.y); // move center by the camera offset
+    ctx.translate(-camera.pos.x, -camera.pos.y); // move center by the camera offset
 
     // Tile backgrounds
     const tileRenders = {
@@ -140,7 +150,7 @@ export function render() {
     ctx.strokeStyle = "black";
     for (let y = view.top; y < view.bottom; y++) {
         for (let x = view.left; x < view.right; x++) {
-            let tile = map.tiles.get({x, y});
+            let tile = map.tiles.get(Pos(x, y));
             let index = animationIndex(x, y - (tile !== 'river'? 0 : Math.floor(simulation.tickId/simulation.TICKS_PER_SECOND)));
             let renderCandidates = tileRenders[tile] ?? ["red"];
             let render = renderCandidates[index % renderCandidates.length];
@@ -154,7 +164,7 @@ export function render() {
 
     ctx.lineJoin = 'bevel'; // some of the game-icons have sharp corners
     for (let door of map.doors) {
-        let {x, y} = door;
+        let {x, y} = door.pos;
         if (view.left <= x && x < view.right
             && view.top <= y && y < view.bottom) {
             let color = `hsla(${360 * door.room1.hash|0}, 50%, 50%, 0.8)`;
@@ -175,7 +185,7 @@ export function render() {
 
     /* draw rooms */
     for (let room of map.rooms) {
-        ctx.fillStyle = `hsla(${360 * room.hash|0}, 50%, 50%, 0.8)`;
+        ctx.fillStyle = `hsla(${360 * room.hash|0}, 50%, 50%, 0.5)`;
         ctx.strokeStyle = "white";
         ctx.lineWidth = 0.05;
         ctx.beginPath();
@@ -207,7 +217,7 @@ const main = {
     dragStart(event) {
         if (event.button !== 0) return; // left button only
         let {x, y} = convertPixelToCanvasCoord(event);
-        this.dragState = {cx: camera.x, cy: camera.y, ox: x, oy: y};
+        this.dragState = {cx: camera.pos.x, cy: camera.pos.y, ox: x, oy: y};
         event.currentTarget.setPointerCapture(event.pointerId);
     },
 
@@ -247,4 +257,3 @@ const main = {
 }
 
 main.init();
-

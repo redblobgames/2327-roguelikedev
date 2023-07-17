@@ -6,26 +6,28 @@
  * Map generation
  */
 
+/// <reference path="mapgen.d.ts"/>
+
 import {offgridCellToRect} from "./offgrid.js";
 import {lerp} from "./util.js";
-
-/**
- * @typedef {Object} Rect  - half-open intervals
- * @property {number} left
- * @property {number} right
- * @property {number} top
- * @property {number} bottom
- */
-
-/**
- * @typedef {Object} Room
- * @property {boolean} unlocked
- * @property {Rect} rect
- */
 
 function tileId(x, y) {
     return `${x}:${y}`;
 }
+
+/**
+ * @param {number} x
+ * @param {number} y
+ * @returns {Position}
+ */
+export function Pos(x, y) {
+    return {
+        x, y,
+        toString() { return tileId(this.x, this.y); },
+        equals(other) { return this.x === other.x && this.y === other.y; },
+    };
+}
+
 
 function generateRooms(bounds) {
     const SEED = 123456;
@@ -41,7 +43,7 @@ function generateRooms(bounds) {
     // 1. To the *left* of the leftmost room, all tiles are walkable.
     //    I need to calculate the leftmost wall for this.
     // 2. Within each room, all tiles are walkable.
-    let walkable = new Set();
+    let walkable = new Map();
     let leftmostWall = new Map();
     for (let y = bounds.top; y < bounds.bottom; y++) {
         leftmostWall.set(y, bounds.left + ROOM_START_LEFT + ROOM_AVERAGE_WIDTH);
@@ -73,7 +75,8 @@ function generateRooms(bounds) {
             // Mark the interior of the room as walkable
             for (let y = rect.top + 1; y < rect.bottom; y++) {
                 for (let x = rect.left + 1; x < rect.right; x++) {
-                    walkable.add(tileId(x, y));
+                    let pos = Pos(x, y);
+                    walkable.set(pos.toString(), pos);
                 }
             }
         }
@@ -81,7 +84,8 @@ function generateRooms(bounds) {
 
     for (let y = bounds.top; y < bounds.bottom; y++) {
         for (let x = bounds.left; x < leftmostWall.get(y); x++) {
-            walkable.add(tileId(x, y));
+            let pos = Pos(x, y);
+            walkable.set(pos.toString(), pos);
         }
     }
 
@@ -94,6 +98,8 @@ function addDoors(roomRows, roomCols, rooms) {
     // adjacent to it on the original grid
 
     function roomAt(q, r) { return rooms.find((room) => room.q === q && room.r === r); }
+
+    /** @type {Set<Door>} */
     let doors = new Set();
     
     for (let r = 0; r < roomRows; r++) {
@@ -110,7 +116,7 @@ function addDoors(roomRows, roomCols, rooms) {
             doors.add({
                 room1: room,
                 room2: leftRoom,
-                x, y
+                pos: Pos(x, y),
             });
             
             // Dig door on top, except on the top row
@@ -123,7 +129,7 @@ function addDoors(roomRows, roomCols, rooms) {
                 doors.add({
                     room1: room,
                     room2: topRoom,
-                    x, y
+                    pos: Pos(x, y),
                 });
             }
         }
@@ -137,15 +143,22 @@ export function generateMap() {
 
     const {roomRows, roomCols, rooms, walkable} = generateRooms(bounds);
     const {doors} = addDoors(roomRows, roomCols, rooms, walkable);
+
+    for (let door of doors) {
+        walkable.set(door.pos.toString(), door.pos);
+    }
     
     return {
         bounds,
         tiles: {
-            get({x, y}) {
-                if (x < bounds.left || x >= bounds.right
-                    || y < bounds.top || y >= bounds.bottom) return 'void';
-                if (!walkable.has(tileId(x, y))) return 'void';
-                return x < 10 + 5 * Math.cos(y*0.1)
+            /**
+             * @param {Position} pos
+             */
+            get(pos) {
+                if (pos.x < bounds.left || pos.x >= bounds.right
+                    || pos.y < bounds.top || pos.y >= bounds.bottom) return 'void';
+                if (!walkable.has(pos.toString())) return 'void';
+                return pos.x < 10 + 5 * Math.cos(pos.y*0.1)
                     ? 'river'
                     : 'plains';
             },
