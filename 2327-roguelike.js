@@ -29,11 +29,7 @@ function convertPixelToCanvasCoord(event) {
 
 
 //////////////////////////////////////////////////////////////////////
-// PLACEHOLDERS
-
-function setMessage(str) {
-    document.querySelector("#messages").textContent = str;
-}
+// Simulation
 
 class Colonist {
     constructor(pos) {
@@ -42,20 +38,56 @@ class Colonist {
         /** @type {Position[]} - reverse order of tiles to visit */
         this.path = [];
     }
+
+    simulate() {
+        if (this.path.length > 0) {
+            // If there's a path, we'll move one step closer to the goal
+            this.pos = this.path.pop();
+        } else {
+            // If no path, let's find a path to a random destination
+            const numberOfDestinations = map.walkable.size;
+            let i = Math.floor(Math.random() * numberOfDestinations);
+            let dest = Array.from(map.walkable.values())[i];
+
+            let bfs = breadthFirstSearch(map, this.pos, dest);
+            if (!bfs) {
+                console.warn("WARN bfs no path", this.pos.toString(), "to", dest.toString())
+                return;
+            }
+            let current = dest;
+            while (!current.equals(this.pos)) {
+                this.path.push(current)
+                current = bfs.came_from[current];
+            }
+        }
+    }
 }
 
-const simulation = {
+const simulation = { // global
     TICKS_PER_SECOND: 10,
     tickId: 0,
-    colonists: [new Colonist(20, 10)],
+    colonists: [],
+    init() {
+        for (let x = 20; x < 25; x++) {
+            for (let y = 10; y < 15; y++) {
+                this.colonists.push(new Colonist(Pos(x, y)));
+            }
+        }
+    },
+    simulate() {
+        this.tickId++;
+        for (let colonist of this.colonists) {
+            colonist.simulate();
+        }
+    },
 };
 
 //////////////////////////////////////////////////////////////////////
 // Map
 
-const map = generateMap();
+const map = generateMap(); // global
 
-const camera = {
+const camera = { // global
     pos: Pos(NaN, NaN),
     set(x, y) {
         const halfwidth = Math.min(this.VIEWWIDTH, map.bounds.right - map.bounds.left) / 2;
@@ -67,7 +99,7 @@ const camera = {
         );
     },
     // For zooming:
-    _z: 4,
+    _z: 10,
     get z() { return this._z; },
     set z(newZ) { this._z = clamp(newZ, 2, 10); },
     get TILE_SIZE() { return 100 / this.z * CANVAS_SCALE; },
@@ -78,7 +110,43 @@ camera.set(0, 0);
 
 
 //////////////////////////////////////////////////////////////////////
+// Pathfinding
+
+/**
+ * @param {Map} map
+ * @param {Position} start
+ * @param {Position} goal
+ */
+function breadthFirstSearch(map, start, goal) {
+    /* see https://www.redblobgames.com/pathfinding/a-star/introduction.html */
+    const DIRS = [[-1, 0], [0, +1], [+1, 0], [0, -1]];
+    let cost_so_far = {}; cost_so_far[start] = 0;
+    let came_from = {}; came_from[start] = null;
+    let fringes = [[start]];
+    for (let k = 0; fringes[k].length > 0; k++) {
+        fringes[k+1] = [];
+        for (let pos of fringes[k]) {
+            if (pos.equals(goal)) return {cost_so_far, came_from};
+            for (let [dx, dy] of DIRS) {
+                let neighbor = Pos(pos.x + dx, pos.y + dy);
+                if (cost_so_far[neighbor] === undefined
+                    && map.walkable.has(neighbor.toString())) {
+                    cost_so_far[neighbor] = k+1;
+                    came_from[neighbor] = pos;
+                    fringes[k+1].push(neighbor);
+                }
+            }
+        }
+    }
+    return null; // TODO: path not found - should never happen
+}
+
+//////////////////////////////////////////////////////////////////////
 // Rendering
+function setMessage(str) {
+    document.querySelector("#messages").textContent = str;
+}
+
 const sprites = await (async function() {
     async function S(url) {
         // This relies on the way game-icons.net svgs are structured,
@@ -168,6 +236,7 @@ export function render() {
         if (view.left <= x && x < view.right
             && view.top <= y && y < view.bottom) {
             let color = `hsla(${360 * door.room1.hash|0}, 50%, 50%, 0.8)`;
+            // TODO: turn this into a helper function that draws a tile and also the label
             ctx.lineWidth = 1/(camera.TILE_SIZE/512);
             ctx.strokeStyle = "white";
             drawTile(x, y, 'door', color);
@@ -193,6 +262,28 @@ export function render() {
         ctx.fill();
         ctx.stroke();
     }
+
+    /* draw creatures */
+    for (let colonist of simulation.colonists) {
+        let {x, y} = colonist.pos;
+        if (view.left <= x && x < view.right
+            && view.top <= y && y < view.bottom) {
+            let color = `hsl(60, 100%, 75%)`;
+            // TODO: turn this into a helper function that draws a tile and also the label
+            ctx.lineWidth = 1/(camera.TILE_SIZE/512);
+            ctx.strokeStyle = "black";
+            drawTile(x, y, 'person', color);
+            if (camera.z < 4) {
+                ctx.font = '0.4px monospace';
+                ctx.lineWidth = 2 / camera.TILE_SIZE;
+                ctx.fillStyle = "white";
+                ctx.textAlign = 'center';
+                const label = "dwarf";
+                ctx.strokeText(label, x+0.5, y+0.9);
+                ctx.fillText(label, x+0.5, y+0.9);
+            }
+        }
+    }        
     
     ctx.restore();
     
@@ -201,6 +292,7 @@ export function render() {
 
 const main = {
     init() {
+        simulation.init();
         render();
         this.loop();
 
@@ -247,7 +339,7 @@ const main = {
     
     loop() {
         if (document.hasFocus() && document.activeElement === canvas) {
-            simulation.tickId++;
+            simulation.simulate();
             render();
         } else {
             setMessage(`Click to focus`);

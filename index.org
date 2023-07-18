@@ -75,12 +75,25 @@ For the other controls, I want to try making something trackpad friendly, requir
 :CUSTOM_ID: entity-render-map
 :END:
 
-{Not sure which chapter this will go in} Last year, pathfinding turned out to be tricky. Colonists could be building a wall that blocks another colonist's movement. To reduce the scope of the game, I'm going to try simplifying the pathfinding requirements.
+I did Part 3 (generating a map) first, and then came back to Part 2 (rendering that map, and entities).
+
+Last year, pathfinding turned out to be tricky. Colonists could be building a wall that blocks another colonist's movement. To reduce the scope of the game, I'm going to try simplifying the pathfinding requirements.
 
 1. The player won't dig out rooms or build walls. The rooms already exist in the map, and are unlocked.
 2. Pathfinding from room to room can be cheap and precalculated. These paths funnel through the doors.
 3. Pathfinding /within/ a room is still tricky, because I want the player to build objects within the room, and those objects would block paths. I need to prohibit building an object that blocks paths across the room.
 4. Colonists can pass through each other. This simplifies the pathfinding obstacle management. The only obstacles are static objects within rooms.
+
+So I implemented pathfinding, using breadth first search for now, but can switch to A* later. I put 25 colonists into the world and told them to find paths to random locations, then walk there. When they have finished walking, they find another path. This tests the pathfinding system before I have jobs for the colonists.
+
+#+begin_export html
+<figure>
+  <img src="blog/2-pathfinding-entities.png" alt="Screenshot of colonists in the world" />
+  <figcaption>Colonists walking around randomly</figcaption>
+</figure>
+#+end_export
+
+A side note: Python is /so wonderful/ in how it allows tuples to be used in so many places, including keys for dicts. In JavaScript, an Object can have string keys, and a Map can have object keys, but there's nothing convenient like Python's tuples for storing ~(x, y)~ pairs. C++ and Rust have the convenient tuples too. I miss this when working in JavaScript, and hope that one day [[https://tc39.es/proposal-record-tuple/tutorial/][they get added]], but there seems to be no progress on that proposal.
 
 * Generating a map
 :PROPERTIES:
@@ -120,7 +133,16 @@ This produces a way to go from the wilderness into the dungeon, and a way to go 
 :CUSTOM_ID: field-of-view
 :END:
 
-Last year I made everything visible. This year though, I want the player to unlock rooms as you go through the game, so those rooms won't be visible until you open them up.
+Last year I made everything visible. This year though, I want the player to unlock rooms as you go through the game, so those rooms won't be visible until you open them up. The /doors/ between two rooms will be visible if /either/ of the rooms is visible.
+
+I'm maintaining a ~walkable~ set of tiles. I decided the easiest thing to do was:
+
+1. The ~walkable~ set starts out as the wilderness area, and doors into the wilderness area.
+2. Unlocking a room adds the room's tiles and doors to ~walkable~.
+
+At some point, unlocking rooms will require resources. For now, I will make it free. I need a UI to unlock rooms. I'll make the door into a button. I need to find all doors that are connected to both an unlocked and locked tile. Then I need to display some visual showing that the door can be acted on. I need to have a mouse click handler that checks for clickable doors. And I need to have the mouse pointer change when moving over a clickable object. The click handler should take precedence over map dragging.
+
+Alternatively, I said earlier I wanted to try a UI where you use /keys/ while your mouse is pointing at something. Maybe this is a chance to do that. I can have mouseover show instructions, and ~U~ to unlock the room.
 
 {not sure where this goes} I want to place objects within rooms. Should I make colonists build those objects, or should they be built immediately? I think immediate is probably easier to implement, but building objects is a great activity for colonists. Given how this project is too ambitious already, I should do the simpler thing.
 
@@ -198,6 +220,6 @@ As much as it might be fun to have gear for the colonists, I am going to skip th
 #+begin_export html
 <x:footer>
   Created 26 Jun 2023; &#160;
-  <!-- hhmts start -->Last modified: 14 Jul 2023<!-- hhmts end -->
+  <!-- hhmts start -->Last modified: 17 Jul 2023<!-- hhmts end -->
 </x:footer>
 #+end_export
