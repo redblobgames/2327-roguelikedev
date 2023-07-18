@@ -133,7 +133,7 @@ This produces a way to go from the wilderness into the dungeon, and a way to go 
 :CUSTOM_ID: field-of-view
 :END:
 
-Last year I made everything visible. This year though, I want the player to unlock rooms as you go through the game, so those rooms won't be visible until you open them up. The /doors/ between two rooms will be visible if /either/ of the rooms is visible.
+Last year I made everything visible. This year, I want the player to unlock rooms as you go through the game, so those rooms won't be visible until you open them up. The /doors/ between two rooms will be visible if /either/ of the rooms is visible.
 
 I'm maintaining a ~walkable~ set of tiles. I decided the easiest thing to do was:
 
@@ -220,6 +220,6 @@ As much as it might be fun to have gear for the colonists, I am going to skip th
 #+begin_export html
 <x:footer>
   Created 26 Jun 2023; &#160;
-  <!-- hhmts start -->Last modified: 17 Jul 2023<!-- hhmts end -->
+  <!-- hhmts start -->Last modified: 18 Jul 2023<!-- hhmts end -->
 </x:footer>
 #+end_export

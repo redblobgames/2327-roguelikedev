@@ -4,7 +4,7 @@
  * @license Apache-2.0 <https://www.apache.org/licenses/LICENSE-2.0.html>
  */
 
-import {Pos, generateMap} from "./mapgen.js";
+import {Pos, unlockRoom, generateMap} from "./mapgen.js";
 import {clamp} from "./util.js";
 
 // Drawing area
@@ -86,6 +86,9 @@ const simulation = { // global
 // Map
 
 const map = generateMap(); // global
+for (let room of map.rooms) { // HACK: for testing
+    if (room.q < 2) unlockRoom(map, room);
+}
 
 const camera = { // global
     pos: Pos(NaN, NaN),
@@ -118,8 +121,11 @@ camera.set(0, 0);
  * @param {Position} goal
  */
 function breadthFirstSearch(map, start, goal) {
-    /* see https://www.redblobgames.com/pathfinding/a-star/introduction.html */
-    const DIRS = [[-1, 0], [0, +1], [+1, 0], [0, -1]];
+    // see https://www.redblobgames.com/pathfinding/a-star/introduction.html
+    // for the algorithm itself, and this hack to make paths prettier with bfs:
+    // https://www.redblobgames.com/pathfinding/a-star/implementation.html#ties-checkerboard-neighbors
+    const DIRS1 = [[-1, 0], [0, +1], [+1, 0], [0, -1]];
+    const DIRS2 = [...DIRS1].reverse();
     let cost_so_far = {}; cost_so_far[start] = 0;
     let came_from = {}; came_from[start] = null;
     let fringes = [[start]];
@@ -127,7 +133,8 @@ function breadthFirstSearch(map, start, goal) {
         fringes[k+1] = [];
         for (let pos of fringes[k]) {
             if (pos.equals(goal)) return {cost_so_far, came_from};
-            for (let [dx, dy] of DIRS) {
+            const parity = (pos.x + pos.y) % 2;
+            for (let [dx, dy] of parity === 0? DIRS1 : DIRS2) {
                 let neighbor = Pos(pos.x + dx, pos.y + dy);
                 if (cost_so_far[neighbor] === undefined
                     && map.walkable.has(neighbor.toString())) {
@@ -138,8 +145,9 @@ function breadthFirstSearch(map, start, goal) {
             }
         }
     }
-    return null; // TODO: path not found - should never happen
+    throw "Path not found - should never happen";
 }
+
 
 //////////////////////////////////////////////////////////////////////
 // Rendering
@@ -290,6 +298,7 @@ export function render() {
     ctx.restore();
 }
 
+
 const main = {
     init() {
         simulation.init();
@@ -332,8 +341,10 @@ const main = {
         // which varies across browsers. The wheelDeltaX, wheelDeltaY
         // are always in pixel units.
         event.preventDefault();
-        // TODO: adjust based on the mouse position too
+        // TODO: zooming should be centered on the current mouse position
+        // instead of on the center of the map
         camera.z = camera.z - event.wheelDeltaY / 1000;
+        camera.set(camera.pos.x, camera.pos.y); // to make sure the bounds are still valid
         render();
     },
     
@@ -347,5 +358,6 @@ const main = {
         setTimeout(() => this.loop(), 1000/simulation.TICKS_PER_SECOND);
     }
 }
+
 
 main.init();

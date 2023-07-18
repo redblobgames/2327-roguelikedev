@@ -11,6 +11,20 @@
 import {offgridCellToRect} from "./offgrid.js";
 import {lerp} from "./util.js";
 
+/** @type {Room} */
+const WILDERNESS_ROOM = {
+    q: -1, r: NaN, hash: NaN,
+    rect: {top: -Infinity, bottom: Infinity},
+    unlocked: true,
+    unlock() { throw "wilderness always unlocked"; },
+};
+
+function wildernessMap({x, y}) {
+    return x < 10 + 5 * Math.cos(y*0.1)
+        ? 'river'
+        : 'plains';
+}
+
 function tileId(x, y) {
     return `${x}:${y}`;
 }
@@ -44,9 +58,9 @@ function generateRooms(bounds) {
     //    I need to calculate the leftmost wall for this.
     // 2. Within each room, all tiles are walkable.
     let walkable = new Map();
-    let leftmostWall = new Map();
+    let wildernessEnds = new Map();
     for (let y = bounds.top; y < bounds.bottom; y++) {
-        leftmostWall.set(y, bounds.left + ROOM_START_LEFT + ROOM_AVERAGE_WIDTH);
+        wildernessEnds.set(y, bounds.left + ROOM_START_LEFT + ROOM_AVERAGE_WIDTH);
     }
 
     const roomRows = Math.floor((bounds.bottom - bounds.top) / ROOM_AVERAGE_HEIGHT) - 1;
@@ -64,32 +78,27 @@ function generateRooms(bounds) {
                 q, r,
                 rect,
                 hash: offgrid.hash,
+                unlocked: false,
             };
             rooms.push(room);
 
             // Need to keep track of the leftmost wall for each row
             for (let y = rect.top; y <= rect.bottom; y++) {
-                leftmostWall.set(y, Math.min(rect.left, leftmostWall.get(y)));
-            }
-            
-            // Mark the interior of the room as walkable
-            for (let y = rect.top + 1; y < rect.bottom; y++) {
-                for (let x = rect.left + 1; x < rect.right; x++) {
-                    let pos = Pos(x, y);
-                    walkable.set(pos.toString(), pos);
-                }
+                wildernessEnds.set(y, Math.min(rect.left, wildernessEnds.get(y)));
             }
         }
     }
 
     for (let y = bounds.top; y < bounds.bottom; y++) {
-        for (let x = bounds.left; x < leftmostWall.get(y); x++) {
+        for (let x = bounds.left; x < wildernessEnds.get(y); x++) {
             let pos = Pos(x, y);
-            walkable.set(pos.toString(), pos);
+            if (wildernessMap(pos) !== 'river') {
+                walkable.set(pos.toString(), pos);
+            }
         }
     }
 
-    return {roomCols, roomRows, rooms, walkable};
+    return {roomCols, roomRows, rooms, walkable, wildernessEnds};
 }
 
 function addDoors(roomRows, roomCols, rooms) {
@@ -108,7 +117,7 @@ function addDoors(roomRows, roomCols, rooms) {
             
             // Dig door on left, with the left column leading to the wilderness
             let leftRoom = roomAt(q-1, r);
-            if (!leftRoom) leftRoom = {rect: {top: -Infinity, bottom: Infinity}}; // wilderness
+            if (!leftRoom) leftRoom = WILDERNESS_ROOM; // wilderness
             let x = room.rect.left;
             let top = Math.max(room.rect.top, leftRoom.rect.top);
             let bottom = Math.min(room.rect.bottom, leftRoom.rect.bottom);
@@ -141,13 +150,9 @@ function addDoors(roomRows, roomCols, rooms) {
 export function generateMap() {
     const bounds = {left: 0, right: 100, top: 0, bottom: 100};
 
-    const {roomRows, roomCols, rooms, walkable} = generateRooms(bounds);
+    const {roomRows, roomCols, rooms, walkable, wildernessEnds} = generateRooms(bounds);
     const {doors} = addDoors(roomRows, roomCols, rooms, walkable);
 
-    for (let door of doors) {
-        walkable.set(door.pos.toString(), door.pos);
-    }
-    
     return {
         bounds,
         tiles: {
@@ -157,15 +162,31 @@ export function generateMap() {
             get(pos) {
                 if (pos.x < bounds.left || pos.x >= bounds.right
                     || pos.y < bounds.top || pos.y >= bounds.bottom) return 'void';
+                if (pos.x < wildernessEnds.get(pos.y)) return wildernessMap(pos);
                 if (!walkable.has(pos.toString())) return 'void';
-                return pos.x < 10 + 5 * Math.cos(pos.y*0.1)
-                    ? 'river'
-                    : 'plains';
+                return 'desert';
             },
         },
         roomRows, roomCols,
         rooms,
         walkable,
+        wildernessEnds,
         doors,
     };
+}
+
+export function unlockRoom(map, room) {
+    const {rect} = room;
+    room.unlocked = true;
+    for (let y = rect.top + 1; y < rect.bottom; y++) {
+        for (let x = rect.left + 1; x < rect.right; x++) {
+            let pos = Pos(x, y);
+            map.walkable.set(pos.toString(), pos);
+        }
+    }
+    for (let door of map.doors) {
+        if (door.room1 === room || door.room2 === room) {
+            map.walkable.set(door.pos.toString(), door.pos);
+        }
+    }
 }
