@@ -65,7 +65,7 @@ class Colonist {
 
 const simulation = { // global
     TICKS_PER_SECOND: 10,
-    tickId: 0,
+    tickId: 1, // start from 1 because I also use this as a truthy value
     colonists: [],
     init() {
         for (let x = 20; x < 25; x++) {
@@ -180,6 +180,7 @@ const sprites = await (async function() {
 
 
 const render = {
+    /** @type {null | Rect} */
     view: null,
     
     begin() {
@@ -274,6 +275,7 @@ const render = {
         ctx.save();
         for (let room of map.rooms) {
             let alpha = room.unlocked ? 0.5 : 0.1;
+            if (main.keyState.r) alpha = 1.0; // HACK: for testing that we can render differently for a UI mode
             ctx.fillStyle = `hsla(${360 * room.hash|0}, 50%, 50%, ${alpha})`;
             ctx.strokeStyle = "white";
             ctx.lineWidth = 0.05;
@@ -326,10 +328,20 @@ const main = {
         canvas.addEventListener('pointermove',    (e) => this.dragMove(e));
         canvas.addEventListener('wheel',          (e) => this.onWheel(e));
         canvas.addEventListener('touchstart',     (e) => e.preventDefault());
+        canvas.addEventListener('keydown',        (e) => this.onKeyDown(e));
+        window.addEventListener('keyup',          (e) => this.onKeyUp(e));
+        window.addEventListener('blur',           (e) => this.onBlur(e));
     },
 
+    /** @type {null | {cx: number, cy: number, ox: number, oy: number}} */
     dragState: null,
-
+    /** @type {[key: string]: null | number;} */
+    keyState: {
+        // maps to either null if not being held or a timestamp if it is down
+        // only keys in this map are tracked (and preventDefault-ed)
+        r: null,
+    },
+    
     dragStart(event) {
         if (event.button !== 0) return; // left button only
         let {x, y} = convertPixelToCanvasCoord(event);
@@ -362,7 +374,40 @@ const main = {
         camera.set(camera.pos.x, camera.pos.y); // to make sure the bounds are still valid
         render.all();
     },
-    
+
+    onBlur(_event) {
+        // We can't track keys when we don't have focus, so assume they were released
+        for (let key of Object.keys(this.keyState)) {
+            this.keyState[key] = null;
+        }
+        render.all();
+    },
+
+    onKeyDown(event) {
+        if (this.keyState[event.key] === undefined) return; // ignore keys we aren't tracking
+
+        // Keydown and keyup are not symmetric. Keydown is conservative,
+        // only considering it down if there are no modifiers.
+        if (event.altKey || event.ctrlKey || event.metaKey) return;
+        event.preventDefault();
+        if (event.repeat) return;
+        this.keyState[event.key] = simulation.tickId;
+        render.all();
+    },
+
+    onKeyUp(event) {
+        if (this.keyState[event.key] === undefined) return; // ignore keys we aren't tracking
+
+        // Keydown and keyup are not symmetric. Keyup releases the key
+        // even if there are modifiers.
+        this.keyState[event.key] = null;
+        if (event.altKey || event.ctrlKey || event.metaKey) return;
+        event.preventDefault(); // Don't prevent default if a modifier is pressed
+        // NOTE: doesn't handle the edge case of press R, press Shift, release R,
+        // because that sends keydown key === 'r' followed by keyup key === 'R'
+        render.all();
+    },
+
     loop() {
         if (document.hasFocus() && document.activeElement === canvas) {
             simulation.simulate();
