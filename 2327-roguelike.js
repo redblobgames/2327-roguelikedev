@@ -179,35 +179,34 @@ const sprites = await (async function() {
 })();
 
 
-export function render() {
-    const halfwidth = camera.VIEWWIDTH / 2;
-    const halfheight = camera.VIEWHEIGHT / 2;
-
-    let view = {
-        left: Math.floor  (camera.pos.x - halfwidth),
-        right: Math.ceil  (camera.pos.x + halfwidth),
-        top: Math.floor   (camera.pos.y - halfheight),
-        bottom: Math.ceil (camera.pos.y + halfheight),
-    };
-
-    setMessage(`Camera ${camera.pos.x.toFixed(2)},${camera.pos.y.toFixed(2)} view ${view.left},${view.right} to ${view.top},${view.bottom}`);
+const render = {
+    view: null,
     
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.save();
-    ctx.scale(camera.TILE_SIZE, camera.TILE_SIZE);
-    ctx.translate(halfwidth, halfheight); // move from top left to center of screen
-    ctx.translate(-camera.pos.x, -camera.pos.y); // move center by the camera offset
+    begin() {
+        const halfwidth = camera.VIEWWIDTH / 2;
+        const halfheight = camera.VIEWHEIGHT / 2;
 
-    // Tile backgrounds
-    const tileRenders = {
-        void: ["hsl(300, 10%, 20%)", "hsl(300 5% 10%)"],
-        grass: ["hsl(100 30% 50%)", "hsl(110 30% 49%)", "hsl(90 35% 50%)", "hsl(100 35% 50%)"],
-        plains: ["hsl(80 30% 60%)", "hsl(90 35% 61%)", "hsl(70 40% 59%)", "hsl(80 40% 60%)"],
-        desert: ["hsl(50 20% 70%)", "hsl(50 15% 70%)", "hsl(50 25% 70%)", "hsl(45 20% 70%)"],
-        river: ["hsl(220 50% 44%)", "hsl(240 50% 43%)", "hsl(230 50% 45%)", "hsl(230 50% 42%)"],
-    };
-    const defaultPath = new Path2D("M 0,0 l 512,0 l 0,512 l -512,0 z");
-    function drawTile(x, y, sprite, color) {
+        this.view = {
+            left: Math.floor  (camera.pos.x - halfwidth),
+            right: Math.ceil  (camera.pos.x + halfwidth),
+            top: Math.floor   (camera.pos.y - halfheight),
+            bottom: Math.ceil (camera.pos.y + halfheight),
+        };
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.save();
+        ctx.scale(camera.TILE_SIZE, camera.TILE_SIZE);
+        ctx.translate(halfwidth, halfheight); // move from top left to center of screen
+        ctx.translate(-camera.pos.x, -camera.pos.y); // move center by the camera offset
+        ctx.lineJoin = 'bevel'; // some of the game-icons have sharp corners
+    },
+    end() {
+        this.view = null; // to help catch rendering outside of begin/end
+        ctx.restore();
+    },
+
+    drawTile(x, y, sprite, color) {
+        const defaultPath = new Path2D("M 0,0 l 512,0 l 0,512 l -512,0 z");
         ctx.translate(x, y);
         ctx.scale(1/512, 1/512);
         ctx.stroke(sprites[sprite] ?? defaultPath);
@@ -215,94 +214,110 @@ export function render() {
         ctx.fill(sprites[sprite] ?? defaultPath);
         ctx.scale(512, 512);
         ctx.translate(-x, -y);
-    }
-    function animationIndex(x, y) {
-        return (x & 7) ^ (y & 7) ^ (((x+y) & 4) ? 0xff : 0);
-    }
+    },
+
+    drawTileLabel(label, x, y) {
+        ctx.font = '0.4px monospace';
+        ctx.lineWidth = 2 / camera.TILE_SIZE;
+        ctx.fillStyle = "white";
+        ctx.textAlign = 'center';
+        ctx.strokeText(label, x+0.5, y+0.9);
+        ctx.fillText(label, x+0.5, y+0.9);
+    },
     
-    ctx.save();
-    ctx.lineJoin = 'bevel'; // some of the game-icons have sharp corners
-    ctx.lineWidth = 1/(camera.TILE_SIZE/512);
-    ctx.strokeStyle = "black";
-    for (let y = view.top; y < view.bottom; y++) {
-        for (let x = view.left; x < view.right; x++) {
-            let tile = map.tiles.get(Pos(x, y));
-            let index = animationIndex(x, y - (tile !== 'river'? 0 : Math.floor(simulation.tickId/simulation.TICKS_PER_SECOND)));
-            let renderCandidates = tileRenders[tile] ?? ["red"];
-            let render = renderCandidates[index % renderCandidates.length];
-            drawTile(x, y, null, render);
+    drawBackground() {
+        // Tile backgrounds
+        const tileRenders = {
+            void: ["hsl(300, 10%, 20%)", "hsl(300 5% 10%)"],
+            grass: ["hsl(100 30% 50%)", "hsl(110 30% 49%)", "hsl(90 35% 50%)", "hsl(100 35% 50%)"],
+            plains: ["hsl(80 30% 60%)", "hsl(90 35% 61%)", "hsl(70 40% 59%)", "hsl(80 40% 60%)"],
+            desert: ["hsl(50 20% 70%)", "hsl(50 15% 70%)", "hsl(50 25% 70%)", "hsl(45 20% 70%)"],
+            river: ["hsl(220 50% 44%)", "hsl(240 50% 43%)", "hsl(230 50% 45%)", "hsl(230 50% 42%)"],
+        };
+        function animationIndex(x, y) {
+            return (x & 7) ^ (y & 7) ^ (((x+y) & 4) ? 0xff : 0);
         }
-    }
-    ctx.restore();
 
-    // Agents are drawn on top of most everything else (except the cursor)
-    ctx.save();
-
-    ctx.lineJoin = 'bevel'; // some of the game-icons have sharp corners
-    for (let door of map.doors) {
-        let {x, y} = door.pos;
-        if (view.left <= x && x < view.right
-            && view.top <= y && y < view.bottom) {
-            let color = `hsla(${360 * door.room1.hash|0}, 50%, 50%, 0.8)`;
-            // TODO: turn this into a helper function that draws a tile and also the label
-            ctx.lineWidth = 1/(camera.TILE_SIZE/512);
-            ctx.strokeStyle = "white";
-            drawTile(x, y, 'door', color);
-            /*
-            ctx.font = '0.4px monospace';
-            ctx.lineWidth = 2 / TILE_SIZE;
-            ctx.fillStyle = "white";
-            ctx.textAlign = 'center';
-            const label = "door";
-            ctx.strokeText(label, x+0.5, y+0.9);
-            ctx.fillText(label, x+0.5, y+0.9);
-            */
-        }
-    }
-
-    /* draw rooms */
-    for (let room of map.rooms) {
-        ctx.fillStyle = `hsla(${360 * room.hash|0}, 50%, 50%, 0.5)`;
-        ctx.strokeStyle = "white";
-        ctx.lineWidth = 0.05;
-        ctx.beginPath();
-        ctx.rect(room.rect.left+1, room.rect.top+1, room.rect.right-room.rect.left-1, room.rect.bottom-room.rect.top-1);
-        ctx.fill();
-        ctx.stroke();
-    }
-
-    /* draw creatures */
-    for (let colonist of simulation.colonists) {
-        let {x, y} = colonist.pos;
-        if (view.left <= x && x < view.right
-            && view.top <= y && y < view.bottom) {
-            let color = `hsl(60, 100%, 75%)`;
-            // TODO: turn this into a helper function that draws a tile and also the label
-            ctx.lineWidth = 1/(camera.TILE_SIZE/512);
-            ctx.strokeStyle = "black";
-            drawTile(x, y, 'person', color);
-            if (camera.z < 4) {
-                ctx.font = '0.4px monospace';
-                ctx.lineWidth = 2 / camera.TILE_SIZE;
-                ctx.fillStyle = "white";
-                ctx.textAlign = 'center';
-                const label = "dwarf";
-                ctx.strokeText(label, x+0.5, y+0.9);
-                ctx.fillText(label, x+0.5, y+0.9);
+        ctx.save();
+        ctx.lineJoin = 'bevel'; // some of the game-icons have sharp corners
+        ctx.lineWidth = 1/(camera.TILE_SIZE/512);
+        ctx.strokeStyle = "black";
+        for (let y = this.view.top; y < this.view.bottom; y++) {
+            for (let x = this.view.left; x < this.view.right; x++) {
+                let tile = map.tiles.get(Pos(x, y));
+                let index = animationIndex(x, y - (tile !== 'river'? 0 : Math.floor(simulation.tickId/simulation.TICKS_PER_SECOND)));
+                let renderCandidates = tileRenders[tile] ?? ["red"];
+                let render = renderCandidates[index % renderCandidates.length];
+                this.drawTile(x, y, null, render);
             }
         }
-    }        
+        ctx.restore();
+    },
+
+    drawDoors() {
+        ctx.save();
+        for (let door of map.doors) {
+            let {x, y} = door.pos;
+            if (this.view.left <= x && x < this.view.right
+                && this.view.top <= y && y < this.view.bottom) {
+                let alpha = (door.room1.unlocked || door.room2.unlocked) ? 0.8 : 0.1;
+                let color = `hsla(${360 * door.room1.hash|0}, 50%, 50%, ${alpha})`;
+                ctx.lineWidth = 1/(camera.TILE_SIZE/512);
+                ctx.strokeStyle = "white";
+                this.drawTile(x, y, 'door', color);
+            }
+        }
+        ctx.restore();
+    },
+
+    drawRooms() {
+        ctx.save();
+        for (let room of map.rooms) {
+            let alpha = room.unlocked ? 0.5 : 0.1;
+            ctx.fillStyle = `hsla(${360 * room.hash|0}, 50%, 50%, ${alpha})`;
+            ctx.strokeStyle = "white";
+            ctx.lineWidth = 0.05;
+            ctx.beginPath();
+            ctx.rect(room.rect.left+1, room.rect.top+1, room.rect.right-room.rect.left-1, room.rect.bottom-room.rect.top-1);
+            ctx.fill();
+            ctx.stroke();
+        }
+        ctx.restore();
+    },
+
+    drawCreatures() {
+        ctx.save();
+        for (let colonist of simulation.colonists) {
+            let {x, y} = colonist.pos;
+            if (this.view.left <= x && x < this.view.right
+                && this.view.top <= y && y < this.view.bottom) {
+                let color = `hsl(60, 100%, 75%)`;
+                ctx.lineWidth = 1/(camera.TILE_SIZE/512);
+                ctx.strokeStyle = "black";
+                this.drawTile(x, y, 'person', color);
+                if (camera.z < 4) this.drawTileLabel("dwarf", x, y);
+            }
+        }
+        ctx.restore();
+    },
     
-    ctx.restore();
-    
-    ctx.restore();
-}
+    all() {
+        this.begin();
+
+        this.drawBackground();
+        this.drawRooms();
+        this.drawDoors();
+        this.drawCreatures();
+        
+        this.end();
+    },
+};
 
 
 const main = {
     init() {
         simulation.init();
-        render();
+        render.all();
         this.loop();
 
         canvas.addEventListener('pointerdown',    (e) => this.dragStart(e));
@@ -333,7 +348,7 @@ const main = {
         let {x, y} = convertPixelToCanvasCoord(event);
         const {cx, cy, ox, oy} = this.dragState;
         camera.set(cx + (ox - x)/camera.TILE_SIZE, cy + (oy - y)/camera.TILE_SIZE);
-        render();
+        render.all();
     },
 
     onWheel(event) {
@@ -345,15 +360,19 @@ const main = {
         // instead of on the center of the map
         camera.z = camera.z - event.wheelDeltaY / 1000;
         camera.set(camera.pos.x, camera.pos.y); // to make sure the bounds are still valid
-        render();
+        render.all();
     },
     
     loop() {
         if (document.hasFocus() && document.activeElement === canvas) {
             simulation.simulate();
-            render();
+            render.all();
+            // TODO: render phases should be broken up into methods so that each
+            // ui state can choose how to render
+            setMessage(`R to see/unlock rooms, or drag the mouse to scroll`); // NOTE: should depend on current ui state
         } else {
-            setMessage(`Click to focus`);
+            setMessage(`Click to focus`); // should unfocused be a state?
+            //  TODO: if focus/unfocus is a state, then I could pause when pressing R
         }
         setTimeout(() => this.loop(), 1000/simulation.TICKS_PER_SECOND);
     }
