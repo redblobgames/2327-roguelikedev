@@ -233,9 +233,18 @@ const render = {
         ctx.translate(-x, -y);
     },
 
-    drawTileLabel(label, x, y) {
-        ctx.font = '0.4px monospace';
+    drawTileLabel(label, x, y, options={}) {
+        let scale = options.scale ?? 0.4;
+        const maxWidth = options.maxWidth ?? Infinity;
+        const maxHeight = options.maxHeight ?? Infinity;
+        ctx.font = `${scale.toFixed(2)}px monospace`;
+        const metrics = ctx.measureText(label);
+        if (metrics.width > maxWidth || metrics.actualBoundingBoxAscent > maxHeight) {
+            scale *= Math.min(maxWidth / metrics.width, maxHeight / metrics.actualBoundingBoxAscent);
+            ctx.font = `${scale.toFixed(2)}px monospace`;
+        }
         ctx.lineWidth = 2 / camera.TILE_SIZE;
+        ctx.strokeStyle = "black";
         ctx.fillStyle = "white";
         ctx.textAlign = 'center';
         ctx.strokeText(label, x+0.5, y+0.9);
@@ -302,6 +311,13 @@ const render = {
             ctx.rect(room.rect.left+1, room.rect.top+1, room.rect.right-room.rect.left-1, room.rect.bottom-room.rect.top-1);
             ctx.fill();
             ctx.stroke();
+            this.drawTileLabel(room.unlocked? "room" : "unlock me",
+                               (room.rect.left+room.rect.right)/2, room.rect.bottom-1,
+                               {
+                                   scale: 2,
+                                   maxWidth: room.rect.right-room.rect.left-2,
+                                   maxHeight: room.rect.bottom-room.rect.top-1.5
+                               });
         }
         ctx.restore();
     },

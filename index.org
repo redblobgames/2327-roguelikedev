@@ -157,12 +157,21 @@ Not all rooms are unlockable. Rooms must be /connected/ to an already unlocked r
 
 #+begin_export html
 <figure>
-  <img src="blog/4-unlockable-rooms.png" alt="Screenshot" />
+  <img src="blog/4-unlockable-rooms.png" alt="Screenshot of unlockable rooms" />
   <figcaption>Only some locked rooms are unlockable</figcaption>
 </figure>
 #+end_export
 
-{not sure where this goes} I want to place objects within rooms. Should I make colonists build those objects, or should they be built immediately? I think immediate is probably easier to implement, but building objects is a great activity for colonists. Given how this project is too ambitious already, I should do the simpler thing. A further simplification would be to have only one type of object per room, and two types of buffer zones (input and output). Then I can have three keys for those three types of things, instead of having a menu to further select types of things. I want multi-tile objects like chair+table in the dining room, but that complicates things, so I should simplify and stick to single tile objects.
+I also want rooms to have labels, but I need to size the labels so that they fit. I used the [[https://developer.mozilla.org/en-US/docs/Web/API/TextMetrics][TextMetrics]] feature to resize them:
+
+#+begin_export html
+<figure>
+  <img src="blog/4-room-labels.png" alt="Screenshot of room labels" />
+  <figcaption>Rooms have labels, sized to fit</figcaption>
+</figure>
+#+end_export
+
+The room labels will be "Kitchen", "Dining", "Bedroom", etc. but I haven't implemented room types yet.
 
 * Placing enemies
 :PROPERTIES:
@@ -170,6 +179,8 @@ Not all rooms are unlockable. Rooms must be /connected/ to an already unlocked r
 :END:
 
 Instead of enemies, I have lots of friendly colonist NPCs. They need to have motivations, jobs, inventory, pathfinding, etc.
+
+I want to place objects within rooms. Should I make colonists build those objects, or should they be built immediately? I think immediate is probably easier to implement, but building objects is a great activity for colonists. Given how this project is too ambitious already, I should do the simpler thing. A further simplification would be to have only one type of object per room, and two types of buffer zones (input and output). Then I can have three keys for those three types of things, instead of having a menu to further select types of things. I want multi-tile objects like chair+table in the dining room, but that complicates things, so I should simplify and stick to single tile objects.
 
 * Combat
 :PROPERTIES:
