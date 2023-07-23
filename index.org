@@ -81,7 +81,7 @@ Last year, pathfinding turned out to be tricky. Colonists could be building a wa
 
 1. The player won't dig out rooms or build walls. The rooms already exist in the map, and are unlocked.
 2. Pathfinding from room to room can be cheap and precalculated. These paths funnel through the doors.
-3. Pathfinding /within/ a room is still tricky, because I want the player to build objects within the room, and those objects would block paths. I need to prohibit building an object that blocks paths across the room.
+3. Pathfinding /within/ a room is still tricky, because I want the player to build objects within the room, and those objects would block paths. I need to prohibit building an object that blocks paths across the room. Or … I can let colonists walk over anything, but assign a higher movement cost to them so that they prefer to walk in open areas.
 4. Colonists can pass through each other. This simplifies the pathfinding obstacle management. The only obstacles are static objects within rooms.
 
 So I implemented pathfinding, using breadth first search for now, but can switch to A* later. I put 25 colonists into the world and told them to find paths to random locations, then walk there. When they have finished walking, they find another path. This tests the pathfinding system before I have jobs for the colonists.
@@ -140,11 +140,13 @@ I'm maintaining a ~walkable~ set of tiles. I decided the easiest thing to do was
 1. The ~walkable~ set starts out as the wilderness area, and doors into the wilderness area.
 2. Unlocking a room adds the room's tiles and doors to ~walkable~.
 
-At some point, unlocking rooms will require resources. For now, I will make it free. I need a UI to unlock rooms. I'll make the door into a button. I need to find all doors that are connected to both an unlocked and locked tile. Then I need to display some visual showing that the door can be acted on. I need to have a mouse click handler that checks for clickable doors. And I need to have the mouse pointer change when moving over a clickable object. The click handler should take precedence over map dragging.
+At some point, unlocking rooms will require resources. For now, I will make it free. I need a UI to unlock rooms. I'm going to try a UI where you hold down a /modifier key/ to change what the mouse does. Hold down ~R~ to activate room mode, and then click on a room to unlock it. I need to have a mouse click handler that checks for clickable rooms. And I need to have the mouse pointer change when moving over a clickable object. The click handler should take precedence over map dragging.
 
-Alternatively, I said earlier I wanted to try a UI where you use /keys/ while your mouse is pointing at something. Maybe this is a chance to do that. I can have mouseover show instructions, and ~U~ to unlock the room.
+I decided I would have a /UI state/ that controls how to render and how to interpret mouse events. The key state controls which UI state I'm in. However, as usual, this simple model didn't quite work cleanly. There were things I needed to deal with like: when pressing  ~R~, I want to highlight the room under the mouse pointer, but the =keydown= event doesn't include the mouse position. That means I need to be storing the mouse position always, even before I need it. Another case is that when pressing ~R~ then ~Shift~ then releasing ~R~, the =keydown= event tells me ='r'= was pressed but the =keyup= event tells me ='R'= was released. There are some edge cases I'm just not going to deal with for this project, but I want to keep it in mind for future projects.
 
-{not sure where this goes} I want to place objects within rooms. Should I make colonists build those objects, or should they be built immediately? I think immediate is probably easier to implement, but building objects is a great activity for colonists. Given how this project is too ambitious already, I should do the simpler thing.
+Bug: I noticed that on Firefox/Mac, holding down a key causes the cursor to mostly disappear. Weird. This is not only on my site, but on any site.
+
+{not sure where this goes} I want to place objects within rooms. Should I make colonists build those objects, or should they be built immediately? I think immediate is probably easier to implement, but building objects is a great activity for colonists. Given how this project is too ambitious already, I should do the simpler thing. A further simplification would be to have only one type of object per room, and two types of buffer zones (input and output). Then I can have three keys for those three types of things, instead of having a menu to further select types of things. I want multi-tile objects like chair+table in the dining room, but that complicates things, so I should simplify and stick to single tile objects.
 
 * Placing enemies
 :PROPERTIES:
@@ -220,6 +222,6 @@ As much as it might be fun to have gear for the colonists, I am going to skip th
 #+begin_export html
 <x:footer>
   Created 26 Jun 2023; &#160;
-  <!-- hhmts start -->Last modified: 18 Jul 2023<!-- hhmts end -->
+  <!-- hhmts start -->Last modified: 22 Jul 2023<!-- hhmts end -->
 </x:footer>
 #+end_export

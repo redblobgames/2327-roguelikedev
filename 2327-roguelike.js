@@ -101,6 +101,15 @@ const camera = { // global
             clamp(y, map.bounds.top + halfheight - margin, map.bounds.bottom - halfheight + margin)
         );
     },
+    // For picking:
+    convertCanvasToWorldCoord({x, y}) {
+        const left = this.pos.x - this.VIEWWIDTH / 2;
+        const top = this.pos.y - this.VIEWHEIGHT / 2;
+        return {
+            x: x / this.TILE_SIZE + left,
+            y: y / this.TILE_SIZE + top,
+        };
+    },
     // For zooming:
     _z: 10,
     get z() { return this._z; },
@@ -182,6 +191,11 @@ const sprites = await (async function() {
 const render = {
     /** @type {null | Rect} */
     view: null,
+    // css cursor to use
+    cursor: '',
+
+    // Local flags to change the rendering
+    highlightedRoom: null,
     
     begin() {
         const halfwidth = camera.VIEWWIDTH / 2;
@@ -200,6 +214,8 @@ const render = {
         ctx.translate(halfwidth, halfheight); // move from top left to center of screen
         ctx.translate(-camera.pos.x, -camera.pos.y); // move center by the camera offset
         ctx.lineJoin = 'bevel'; // some of the game-icons have sharp corners
+
+        if (canvas.style.cursor !== this.cursor) canvas.style.cursor = this.cursor;
     },
     end() {
         this.view = null; // to help catch rendering outside of begin/end
@@ -278,7 +294,7 @@ const render = {
             if (main.keyState.r) alpha = 1.0; // HACK: for testing that we can render differently for a UI mode
             ctx.fillStyle = `hsla(${360 * room.hash|0}, 50%, 50%, ${alpha})`;
             ctx.strokeStyle = "white";
-            ctx.lineWidth = 0.05;
+            ctx.lineWidth = room === this.highlightedRoom ? 0.25 : 0.05;
             ctx.beginPath();
             ctx.rect(room.rect.left+1, room.rect.top+1, room.rect.right-room.rect.left-1, room.rect.bottom-room.rect.top-1);
             ctx.fill();
@@ -317,22 +333,6 @@ const render = {
 
 
 const main = {
-    init() {
-        simulation.init();
-        render.all();
-        this.loop();
-
-        canvas.addEventListener('pointerdown',    (e) => this.dragStart(e));
-        canvas.addEventListener('pointerup',      (e) => this.dragEnd(e));
-        canvas.addEventListener('pointercancel',  (e) => this.dragEnd(e));
-        canvas.addEventListener('pointermove',    (e) => this.dragMove(e));
-        canvas.addEventListener('wheel',          (e) => this.onWheel(e));
-        canvas.addEventListener('touchstart',     (e) => e.preventDefault());
-        canvas.addEventListener('keydown',        (e) => this.onKeyDown(e));
-        window.addEventListener('keyup',          (e) => this.onKeyUp(e));
-        window.addEventListener('blur',           (e) => this.onBlur(e));
-    },
-
     /** @type {null | {cx: number, cy: number, ox: number, oy: number}} */
     dragState: null,
     /** @type {[key: string]: null | number;} */
@@ -341,46 +341,110 @@ const main = {
         // only keys in this map are tracked (and preventDefault-ed)
         r: null,
     },
+    // last known position of the pointer, in world coordinates
+    // TODO: convert the whole program to use sx, sy for screen (canvas) and wx, wy for world
+    pointerState: {
+        wx: 0,
+        wy: 0,
+    },
     
-    dragStart(event) {
+    init() {
+        simulation.init();
+        this.render();
+        this.loop();
+
+        for (let event of ['Click', 'PointerDown', 'PointerUp', 'PointerCancel', 'PointerMove', 'Wheel', 'KeyDown', 'KeyUp', 'Blur']) {
+            let el = (event === 'KeyUp' || event === 'Blur')? window : canvas;
+            el.addEventListener(event.toLowerCase(), (e) => {
+                // Try calling state_onEvent and also onEvent
+                for (let handlerCandidate of [`${this.uiMode}_on${event}`, `on${event}`]) {
+                    if (handlerCandidate in this) {
+                        this[handlerCandidate](e);
+                    }
+                }
+            });
+        }
+    },
+
+    /** @type {'stopped' | 'view' | 'room'} */
+    get uiMode() {
+        if (!document.hasFocus())              return 'stopped';
+        if (document.activeElement !== canvas) return 'stopped';
+        if (this.keyState.r)                   return 'room';
+        return 'view';
+    },
+
+    onPointerMove(event) {
+        this.pointerState = camera.convertCanvasToWorldCoord(convertPixelToCanvasCoord(event));
+    },
+    
+    view_onPointerDown(event) {
         if (event.button !== 0) return; // left button only
         let {x, y} = convertPixelToCanvasCoord(event);
         this.dragState = {cx: camera.pos.x, cy: camera.pos.y, ox: x, oy: y};
         event.currentTarget.setPointerCapture(event.pointerId);
     },
 
-    dragEnd(_event) {
+    view_onPointerUp(_event) {
         this.dragState = null;
     },
 
-    dragMove(event) {
+    view_onPointerCancel(_event) {
+        this.dragState = null;
+    },
+    
+    view_onPointerMove(event) {
         if (!this.dragState) return;
         // Invariant: I want the position under the cursor
         // to stay the same tile.
         let {x, y} = convertPixelToCanvasCoord(event);
         const {cx, cy, ox, oy} = this.dragState;
         camera.set(cx + (ox - x)/camera.TILE_SIZE, cy + (oy - y)/camera.TILE_SIZE);
-        render.all();
+        this.render();
     },
 
-    onWheel(event) {
+    view_onWheel(event) {
         // NOTE: the deltaX, deltaY values are in the deltaMode units,
         // which varies across browsers. The wheelDeltaX, wheelDeltaY
         // are always in pixel units.
         event.preventDefault();
-        // TODO: zooming should be centered on the current mouse position
-        // instead of on the center of the map
+        // TODO: implement invariant: I want the position under
+        // the cursor to stay the same tile.
         camera.z = camera.z - event.wheelDeltaY / 1000;
         camera.set(camera.pos.x, camera.pos.y); // to make sure the bounds are still valid
-        render.all();
+        this.render();
     },
 
+    room_onPointerMove(event) {
+        let {x, y} = camera.convertCanvasToWorldCoord(convertPixelToCanvasCoord(event));
+        // TODO: highlight the room in the render -- where should this state go? should be view dependent, and also reset when the view changes
+        // TODO: also want to calculate this when pressing R, but that means I need to keep track of the mouse position at all times, because the R key won't come with a mouse position
+        render.highlightedRoom = map.rooms.find((room) =>
+                room.rect.left+1 <= x && x < room.rect.right
+                && room.rect.top+1 <= y && y < room.rect.bottom);
+        // TODO: display some information about that room
+        // TODO: set mouse pointer based on whether the room is unlockable
+    },
+    
+    room_onClick(event) {
+        if (event.button !== 0) return; // left button only
+        let {x, y} = camera.convertCanvasToWorldCoord(convertPixelToCanvasCoord(event));
+        // Unlock the room if it's locked
+        let room = map.rooms.find((room) =>
+                room.rect.left+1 <= x && x < room.rect.right
+                && room.rect.top+1 <= y && y < room.rect.bottom);
+        if (room && !room.unlocked) {
+            unlockRoom(map, room);
+            this.render();
+        }
+    },
+    
     onBlur(_event) {
         // We can't track keys when we don't have focus, so assume they were released
         for (let key of Object.keys(this.keyState)) {
             this.keyState[key] = null;
         }
-        render.all();
+        this.render();
     },
 
     onKeyDown(event) {
@@ -392,7 +456,7 @@ const main = {
         event.preventDefault();
         if (event.repeat) return;
         this.keyState[event.key] = simulation.tickId;
-        render.all();
+        this.render();
     },
 
     onKeyUp(event) {
@@ -405,20 +469,33 @@ const main = {
         event.preventDefault(); // Don't prevent default if a modifier is pressed
         // NOTE: doesn't handle the edge case of press R, press Shift, release R,
         // because that sends keydown key === 'r' followed by keyup key === 'R'
-        render.all();
+        this.render();
     },
 
+    render() {
+        // TODO: render differently based on the ui mode
+        render.all();
+    },
+    
     loop() {
-        if (document.hasFocus() && document.activeElement === canvas) {
+        switch (this.uiMode) {
+        case 'stopped':
+            render.cursor = 'wait';
+            setMessage(`Click to focus`);
+            break;
+        case 'view':
+            render.cursor = 'move';
             simulation.simulate();
-            render.all();
-            // TODO: render phases should be broken up into methods so that each
-            // ui state can choose how to render
+            this.render();
             setMessage(`R to see/unlock rooms, or drag the mouse to scroll`); // NOTE: should depend on current ui state
-        } else {
-            setMessage(`Click to focus`); // should unfocused be a state?
-            //  TODO: if focus/unfocus is a state, then I could pause when pressing R
+            break;
+        case 'room':
+            render.cursor = (render.highlightedRoom && !render.highlightedRoom.unlocked) ? 'pointer' : 'cell';
+            this.render();
+            setMessage("TODO: click to unlock a room");
+            break;
         }
+
         setTimeout(() => this.loop(), 1000/simulation.TICKS_PER_SECOND);
     }
 }
