@@ -190,3 +190,23 @@ export function unlockRoom(map, room) {
         }
     }
 }
+
+const UNLOCKABLE_ROOM_LIMIT = 3;
+/**
+ * Unlockable rooms are connected to an unlocked
+ * room AND are limited in number
+ */
+export function unlockableRoomList(map) {
+    let candidates = /** @type {Set<Room>} */(new Set());
+    // Easiest way to find the unlockable rooms is to check the doors
+    for (let door of map.doors) {
+        if (door.room1.unlocked !== door.room2.unlocked) {
+            if (!door.room1.unlocked) candidates.add(door.room1);
+            if (!door.room2.unlocked) candidates.add(door.room2);
+        }
+    }
+    // Sorting by hash is easy and consistent across frames
+    let rooms = Array.from(candidates);
+    rooms.sort((a, b) => a.hash - b.hash);
+    return rooms.slice(0, UNLOCKABLE_ROOM_LIMIT);
+}

@@ -4,7 +4,7 @@
  * @license Apache-2.0 <https://www.apache.org/licenses/LICENSE-2.0.html>
  */
 
-import {Pos, unlockRoom, generateMap} from "./mapgen.js";
+import {Pos, unlockRoom, unlockableRoomList, generateMap} from "./mapgen.js";
 import {clamp} from "./util.js";
 
 // Drawing area
@@ -289,9 +289,10 @@ const render = {
 
     drawRooms() {
         ctx.save();
+        let unlockable = unlockableRoomList(map);
         for (let room of map.rooms) {
             let alpha = room.unlocked ? 0.5 : 0.1;
-            if (main.keyState.r) alpha = 1.0; // HACK: for testing that we can render differently for a UI mode
+            if (main.keyState.r && unlockable.indexOf(room) >= 0) alpha = 1.0; // HACK: for testing that we can render differently for a UI mode
             ctx.fillStyle = `hsla(${360 * room.hash|0}, 50%, 50%, ${alpha})`;
             ctx.strokeStyle = "white";
             ctx.lineWidth = room === this.highlightedRoom ? 0.25 : 0.05;
@@ -344,8 +345,8 @@ const main = {
     // last known position of the pointer, in world coordinates
     // TODO: convert the whole program to use sx, sy for screen (canvas) and wx, wy for world
     pointerState: {
-        wx: 0,
-        wy: 0,
+        x: 0,
+        y: 0,
     },
     
     init() {
@@ -423,7 +424,6 @@ const main = {
                 room.rect.left+1 <= x && x < room.rect.right
                 && room.rect.top+1 <= y && y < room.rect.bottom);
         // TODO: display some information about that room
-        // TODO: set mouse pointer based on whether the room is unlockable
     },
     
     room_onClick(event) {
@@ -433,7 +433,7 @@ const main = {
         let room = map.rooms.find((room) =>
                 room.rect.left+1 <= x && x < room.rect.right
                 && room.rect.top+1 <= y && y < room.rect.bottom);
-        if (room && !room.unlocked) {
+        if (room && unlockableRoomList(map).indexOf(room) >= 0) {
             unlockRoom(map, room);
             this.render();
         }
@@ -490,7 +490,7 @@ const main = {
             setMessage(`R to see/unlock rooms, or drag the mouse to scroll`); // NOTE: should depend on current ui state
             break;
         case 'room':
-            render.cursor = (render.highlightedRoom && !render.highlightedRoom.unlocked) ? 'pointer' : 'cell';
+            render.cursor = unlockableRoomList(map).indexOf(render.highlightedRoom) >= 0 ? 'pointer' : 'cell';
             this.render();
             setMessage("TODO: click to unlock a room");
             break;
