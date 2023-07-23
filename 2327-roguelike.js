@@ -277,10 +277,10 @@ const render = {
             let {x, y} = door.pos;
             if (this.view.left <= x && x < this.view.right
                 && this.view.top <= y && y < this.view.bottom) {
-                let alpha = (door.room1.unlocked || door.room2.unlocked) ? 0.8 : 0.1;
-                let color = `hsla(${360 * door.room1.hash|0}, 50%, 50%, ${alpha})`;
+                if (!door.room1.unlocked && !door.room2.unlocked) continue;
+                let color = `hsl(${360 * door.room1.hash|0} 50% 50%)`;
                 ctx.lineWidth = 1/(camera.TILE_SIZE/512);
-                ctx.strokeStyle = "white";
+                ctx.strokeStyle = (door.room1.unlocked && door.room2.unlocked) ? "white" : "black";
                 this.drawTile(x, y, 'door', color);
             }
         }
@@ -289,10 +289,12 @@ const render = {
 
     drawRooms() {
         ctx.save();
-        let unlockable = unlockableRoomList(map);
+        let unlockableRooms = unlockableRoomList(map);
         for (let room of map.rooms) {
+            let unlockable = unlockableRooms.indexOf(room) >= 0;
+            if (!room.unlocked && !unlockable) continue;
             let alpha = room.unlocked ? 0.5 : 0.1;
-            if (main.keyState.r && unlockable.indexOf(room) >= 0) alpha = 1.0; // HACK: for testing that we can render differently for a UI mode
+            if (main.uiMode === 'room' && unlockable) alpha = 1.0;
             ctx.fillStyle = `hsla(${360 * room.hash|0}, 50%, 50%, ${alpha})`;
             ctx.strokeStyle = "white";
             ctx.lineWidth = room === this.highlightedRoom ? 0.25 : 0.05;
@@ -416,16 +418,6 @@ const main = {
         this.render();
     },
 
-    room_onPointerMove(event) {
-        let {x, y} = camera.convertCanvasToWorldCoord(convertPixelToCanvasCoord(event));
-        // TODO: highlight the room in the render -- where should this state go? should be view dependent, and also reset when the view changes
-        // TODO: also want to calculate this when pressing R, but that means I need to keep track of the mouse position at all times, because the R key won't come with a mouse position
-        render.highlightedRoom = map.rooms.find((room) =>
-                room.rect.left+1 <= x && x < room.rect.right
-                && room.rect.top+1 <= y && y < room.rect.bottom);
-        // TODO: display some information about that room
-    },
-    
     room_onClick(event) {
         if (event.button !== 0) return; // left button only
         let {x, y} = camera.convertCanvasToWorldCoord(convertPixelToCanvasCoord(event));
@@ -478,6 +470,7 @@ const main = {
     },
     
     loop() {
+        render.highlightedRoom = null;
         switch (this.uiMode) {
         case 'stopped':
             render.cursor = 'wait';
@@ -487,12 +480,15 @@ const main = {
             render.cursor = 'move';
             simulation.simulate();
             this.render();
-            setMessage(`R to see/unlock rooms, or drag the mouse to scroll`); // NOTE: should depend on current ui state
+            setMessage(`R to see/unlock rooms, or drag the mouse to scroll`);
             break;
         case 'room':
+            render.highlightedRoom = map.rooms.find((room) =>
+                room.rect.left+1 <= this.pointerState.x && this.pointerState.x < room.rect.right
+                    && room.rect.top+1 <= this.pointerState.y && this.pointerState.y < room.rect.bottom);
             render.cursor = unlockableRoomList(map).indexOf(render.highlightedRoom) >= 0 ? 'pointer' : 'cell';
             this.render();
-            setMessage("TODO: click to unlock a room");
+            setMessage("Click to unlock a room");
             break;
         }
 
