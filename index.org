@@ -133,14 +133,21 @@ This produces a way to go from the wilderness into the dungeon, and a way to go 
 :CUSTOM_ID: field-of-view
 :END:
 
-Last year I made everything visible. This year, I want the player to unlock rooms as you go through the game, so those rooms won't be visible until you open them up. The /doors/ between two rooms will be visible if /either/ of the rooms is visible.
+The original tutorial calculates which /tiles/ are visible to the player. For this colonist style game I want to compute which /rooms/ and /doors/ are visible to the player. Last year I made everything visible, so I skipped this part. This year, I want the player to unlock rooms as you go through the game, so those rooms won't be visible until you open them up. Here are the visibility rules I came up with:
 
-I'm maintaining a ~walkable~ set of tiles. I decided the easiest thing to do was:
+1. The player can view the wilderness.
+1. The player can view unlocked (colonized) rooms.
+1. The player can view the outline but not the interior of unlockable rooms.
+1. The player cannot view locked rooms that aren't currently unlockable.
+1. Unlockable rooms are currently locked and connected to an unlocked room.
+1. There can be at most 3 unlockable rooms at a time. I'm hoping to get a "pick one of these 3 cards" vibe here.
+1. Once a room is unlocked, it stays unlocked.
+1. A door is visible if either of the rooms it is connected to are visible.
+
+Separate from room lock/unlock status, I'm maintaining a ~walkable~ set of tiles. I decided the easiest thing to do was:
 
 1. The ~walkable~ set starts out as the wilderness area, and doors into the wilderness area.
-2. Unlocking a room adds the room's tiles and doors to ~walkable~.
-
-At some point, unlocking rooms will require resources. For now, I will make it free. I need a UI to unlock rooms. I'm going to try a UI where you hold down a /modifier key/ to change what the mouse does. Hold down ~R~ to activate room mode, and then click on a room to unlock it. I need to have a mouse click handler that checks for clickable rooms. And I need to have the mouse pointer change when moving over a clickable object. The click handler should take precedence over map dragging.
+1. Unlocking a room adds the room's tiles and doors to ~walkable~.
 
 #+begin_export html
 <figure>
