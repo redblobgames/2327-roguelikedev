@@ -16,16 +16,17 @@ canvas.width *= CANVAS_SCALE;
 canvas.height *= CANVAS_SCALE;
 
 /** Convert from event coordinate space (on the page) to Canvas coordinate
- * space (assuming there are no transforms on the canvas) */
+ * space (assuming there are no transforms on the canvas)
+ * @param {PointerEvent} event
+ * @returns {Pos}
+ */
 function convertPixelToCanvasCoord(event) {
-    const canvas = event.currentTarget; // should be the same as the global 'canvas' var
     const bounds = canvas.getBoundingClientRect();
-    return {
-        x: (event.x - bounds.left) / bounds.width * canvas.width,
-        y: (event.y - bounds.top) / bounds.height * canvas.height,
-    };
+    return Pos(
+        (event.x - bounds.left) / bounds.width * canvas.width,
+        (event.y - bounds.top) / bounds.height * canvas.height,
+    );
 }
-
 
 
 //////////////////////////////////////////////////////////////////////
@@ -125,7 +126,7 @@ camera.set(0, 0);
 // Pathfinding
 
 /**
- * @param {Map} map
+ * @param {Object} map
  * @param {Position} start
  * @param {Position} goal
  */
@@ -165,25 +166,35 @@ function setMessage(str) {
 }
 
 const sprites = await (async function() {
-    async function S(url) {
+    async function S(icon) {
         // This relies on the way game-icons.net svgs are structured,
         // as a single <path d="…"/>
+        const url = `./game-icons/${icon}.svg`;
         const stream = await fetch(url);
         const svg = await stream.text();
         return new Path2D(svg.replace(/.* d="/, "").replace(/".*/, ""));
     }
     
     return {
-        person:     await S("./game-icons/delapouite/person.svg"),
-        rooster:    await S("./game-icons/delapouite/rooster.svg"),
-        grass:      await S("./game-icons/delapouite/grass.svg"),
-        wheat:      await S("./game-icons/lorc/wheat.svg"),
-        wall:       await S("./game-icons/delapouite/stone-wall.svg"),
-        cactus:     await S("./game-icons/delapouite/cactus.svg"),
-        door:       await S("./game-icons/delapouite/door.svg"),
-        move:       await S("./game-icons/delapouite/move.svg"),
-        square:     await S("./game-icons/delapouite/square.svg"),
-        sprout:     await S("./game-icons/lorc/sprout.svg"),
+        person:     await S("delapouite/person"),
+        rooster:    await S("delapouite/rooster"),
+        grass:      await S("delapouite/grass"),
+        wheat:      await S("lorc/wheat"),
+        grain_bundle: await S("delapouite/grain-bundle"),
+        wall:       await S("delapouite/stone-wall"),
+        cactus:     await S("delapouite/cactus"),
+        door:       await S("delapouite/door"),
+        move:       await S("delapouite/move"),
+        square:     await S("delapouite/square"),
+        sprout:     await S("lorc/sprout"),
+        table:      await S("delapouite/table"),
+        desk:       await S("delapouite/desk"),
+        digdug:     await S("lorc/dig-dug"),
+        mining:     await S("lorc/mining"),
+        anvil_impact: await S("lorc/anvil-impact"),
+        hand_saw: await S("delapouite/hand-saw"),
+        fishing_pole: await S("delapouite/fishing-pole"),
+        watering_can: await S("delapouite/watering-can"),
     };
 })();
 
@@ -354,7 +365,7 @@ const render = {
 const main = {
     /** @type {null | {cx: number, cy: number, ox: number, oy: number}} */
     dragState: null,
-    /** @type {[key: string]: null | number;} */
+    /** @type {{[key: string]: null | number}} */
     keyState: {
         // maps to either null if not being held or a timestamp if it is down
         // only keys in this map are tracked (and preventDefault-ed)

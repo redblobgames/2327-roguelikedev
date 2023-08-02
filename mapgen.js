@@ -11,12 +11,15 @@
 import {offgridCellToRect} from "./offgrid.js";
 import {lerp} from "./util.js";
 
+const ROOM_START_LEFT = 20;
+
 /** @type {Room} */
 const WILDERNESS_ROOM = {
+    type: 'wilderness',
     q: -1, r: NaN, hash: NaN,
-    rect: {top: -Infinity, bottom: Infinity},
+    rect: {top: -Infinity, bottom: Infinity, left: 0, right: ROOM_START_LEFT},
     unlocked: true,
-    unlock() { throw "wilderness always unlocked"; },
+    furniture: [],
 };
 
 function wildernessMap({x, y}) {
@@ -25,6 +28,10 @@ function wildernessMap({x, y}) {
         : 'plains';
 }
 
+/**
+ * @param {number} x -
+ * @param {number} y -
+ */
 function tileId(x, y) {
     return `${x}:${y}`;
 }
@@ -43,10 +50,13 @@ export function Pos(x, y) {
 }
 
 
+/**
+ * Generate the rooms of the map, without doors or furniture
+ * @param {Rect} bounds - the map area
+ */
 function generateRooms(bounds) {
     const SEED = 123456;
     const EDGE = 0.1;
-    const ROOM_START_LEFT = 20;
     const ROOM_AVERAGE_WIDTH = 12;
     const ROOM_AVERAGE_HEIGHT = 5;
     
@@ -74,11 +84,20 @@ function generateRooms(bounds) {
                 top: bounds.top + Math.round(offgrid.top * ROOM_AVERAGE_HEIGHT),
                 bottom: bounds.top + Math.round(offgrid.bottom * ROOM_AVERAGE_HEIGHT),
             };
+            
+            // TODO: type should depend on 'q', hash, and room size
+            // (small rooms should have an 'empty' type and low cost to unlock)
+            /** @type{RoomType} */
+            let type = 'dining';
+            if (q >= 1) type = 'bedroom';
+            if (rect.right - rect.left < 5 || rect.bottom - rect.top < 3) type = 'open';
             let room = {
+                type,
                 q, r,
-                rect,
                 hash: offgrid.hash,
+                rect,
                 unlocked: false,
+                furniture: [],
             };
             rooms.push(room);
 
@@ -101,6 +120,13 @@ function generateRooms(bounds) {
     return {roomCols, roomRows, rooms, walkable, wildernessEnds};
 }
 
+
+/**
+ * Add doors to the existing rooms
+ * @param {number} roomRows - 
+ * @param {number} roomCols - 
+ * @param {Array<Room>} rooms - 
+ */
 function addDoors(roomRows, roomCols, rooms) {
     // Underlying the offgrid rooms is an original grid with q,r
     // coordinates. Each room gets connected to the four rooms
@@ -151,7 +177,7 @@ export function generateMap() {
     const bounds = {left: 0, right: 100, top: 0, bottom: 100};
 
     const {roomRows, roomCols, rooms, walkable, wildernessEnds} = generateRooms(bounds);
-    const {doors} = addDoors(roomRows, roomCols, rooms, walkable);
+    const {doors} = addDoors(roomRows, roomCols, rooms);
 
     return {
         bounds,

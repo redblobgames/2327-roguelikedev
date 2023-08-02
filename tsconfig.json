@@ -1,0 +1,10 @@
+{
+    "compilerOptions": {
+        "target": "esnext",
+        "module": "esnext",
+        "allowJs": true,
+        "checkJs": true,
+    },
+    "include": ["./*.js", "*/*.ts"],
+    "exclude": ["node_modules", "build"]
+}
