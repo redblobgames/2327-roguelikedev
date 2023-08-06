@@ -32,12 +32,66 @@ function convertPixelToCanvasCoord(event) {
 //////////////////////////////////////////////////////////////////////
 // Simulation
 
+const roomCharacteristics = {
+    // TODO: furniture needs a name
+    // map the room type to things we need to know about how the room works
+    wilderness: {
+        color: "hsl(100 30% 60%)",
+        furnitureShape: {
+            ticks: 1,
+            stand: Pos(0, 0),
+            inputs: [],
+            output: 'rawfood',
+            sprites: [{type: 'cactus', pos: Pos(0, 0)}],
+        },
+    },
+    open: {
+        color: "hsl(0 0% 40%)",
+        furnitureShape: null,
+    },
+    dining: {
+        furnitureShape: {
+            ticks: 20,
+            stand: Pos(0, 1),
+            inputs: [{type: 'rawfood', pos: Pos(0, 0)}],
+            output: null,
+            sprites: [{type: 'table', pos: Pos(0, 0)}],
+        },
+        // TODO: needs to reduce hunger
+    },
+    bedroom: {
+        furnitureShape: {
+            ticks: 60,
+            stand: Pos(0, 0),
+            inputs: [],
+            output: null,
+            sprites: [{type: 'bed', pos: Pos(0, 0)}],
+        },
+        // TODO: needs to reduce sleepiness
+    },
+    tool_shop: {
+        // NOTE: test of multi-input production
+        furnitureShape: {
+            ticks: 60,
+            stand: Pos(0, 1),
+            inputs: [
+                {type: 'iron', pos: Pos(-1, 0)},
+                {type: 'wood', pos: Pos(0, -1)},
+            ],
+            output: 'axe',
+            sprites: [{type: 'table', pos: Pos(0, 0)}],
+        },
+    },
+};
+
+
 class Colonist {
     constructor(pos) {
         /** @type {Position} */
         this.pos = pos;
         /** @type {Position[]} - reverse order of tiles to visit */
         this.path = [];
+        // TODO: status like sleepiness, hunger - would go up over time
     }
 
     simulate() {
@@ -90,6 +144,7 @@ const map = generateMap(); // global
 for (let room of map.rooms) { // HACK: for testing
     if (room.q < 2) unlockRoom(map, room);
 }
+map.rooms[0].furniture = [Pos(map.rooms[0].rect.left + 2, map.rooms[0].rect.top + 2)];
 
 const camera = { // global
     pos: Pos(NaN, NaN),
@@ -298,7 +353,7 @@ const render = {
             if (this.view.left <= x && x < this.view.right
                 && this.view.top <= y && y < this.view.bottom) {
                 if (!door.room1.unlocked && !door.room2.unlocked) continue;
-                let color = `hsl(${360 * door.room1.hash|0} 50% 50%)`;
+                let color = `hsl(30 30% 30%)`;
                 ctx.lineWidth = 1/(camera.TILE_SIZE/512);
                 ctx.strokeStyle = (door.room1.unlocked && door.room2.unlocked) ? "white" : "black";
                 this.drawTile(x, y, 'door', color);
@@ -315,14 +370,16 @@ const render = {
             if (!room.unlocked && !unlockable) continue;
             let alpha = room.unlocked ? 0.5 : 0.1;
             if (main.uiMode === 'room' && unlockable) alpha = 1.0;
-            ctx.fillStyle = `hsla(${360 * room.hash|0}, 50%, 50%, ${alpha})`;
+            ctx.globalAlpha = alpha;
+            ctx.fillStyle = roomCharacteristics[room.type].color ?? `hsl(${360 * room.hash|0} 50% 50%)`;
             ctx.strokeStyle = "white";
             ctx.lineWidth = room === this.highlightedRoom ? 0.25 : 0.05;
             ctx.beginPath();
             ctx.rect(room.rect.left+1, room.rect.top+1, room.rect.right-room.rect.left-1, room.rect.bottom-room.rect.top-1);
             ctx.fill();
+            ctx.globalAlpha = 1.0;
             ctx.stroke();
-            this.drawTileLabel(room.unlocked? "room" : "unlock me",
+            this.drawTileLabel(room.unlocked? room.type : "?",
                                (room.rect.left+room.rect.right)/2, room.rect.bottom-1,
                                {
                                    scale: 2,
@@ -333,6 +390,29 @@ const render = {
         ctx.restore();
     },
 
+    drawFurniture() {
+        ctx.save();
+        for (let room of map.rooms) {
+            const furnitureData = roomCharacteristics[room.type];
+            if (!furnitureData) continue;
+            for (let {x, y} of room.furniture) {
+                if (this.view.left <= x && x < this.view.right
+                    && this.view.top <= y && y < this.view.bottom) {
+                    let color = furnitureData.color ?? `hsl(300, 100%, 75%)`;
+                    ctx.lineWidth = 1/(camera.TILE_SIZE/512);
+                    ctx.strokeStyle = "black";
+                    for (let sprite of furnitureData.furnitureShape.sprites) {
+                        console.log(JSON.stringify(sprite))
+                        this.drawTile(x + sprite.pos.x, y + sprite.pos.y,
+                                      sprite.type, color);
+                    }
+                    if (camera.z < 4) this.drawTileLabel("table", x, y);
+                }
+            }
+        }
+        ctx.restore();
+    },
+    
     drawCreatures() {
         ctx.save();
         for (let colonist of simulation.colonists) {
@@ -355,6 +435,7 @@ const render = {
         this.drawBackground();
         this.drawRooms();
         this.drawDoors();
+        this.drawFurniture();
         this.drawCreatures();
         
         this.end();

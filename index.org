@@ -156,9 +156,20 @@ Separate from room lock/unlock status, I'm maintaining a ~walkable~ set of tiles
 </figure>
 #+end_export
 
-I decided I would have a /UI mode/ that controls how to render and how to interpret mouse events. The key state controls which UI mode I'm in. However, as usual, this simple model didn't quite work cleanly. There were things I needed to deal with like: when pressing  ~R~, I want to highlight the room under the mouse pointer, but the =keydown= event doesn't include the mouse position. That means I need to be storing the mouse position always, even before I need it. Another case is that when pressing ~R~ then ~Shift~ then releasing ~R~, the =keydown= event tells me ='r'= was pressed but the =keyup= event tells me ='R'= was released. There are some edge cases I'm just not going to deal with for this project, but I want to keep it in mind for future projects.
+At some point, unlocking rooms will require resources. For now, I will make it free. I need a UI to unlock rooms. Part 7 in the original tutorial was about interface, so I'm going to work on that now.
 
-Bug: I noticed that on Firefox/Mac, holding down a key causes the cursor to mostly disappear. Weird. This is not only on my site, but on any site.
+* Interface (Part 7)
+:PROPERTIES:
+:CUSTOM_ID: interface
+:END:
+
+This was the topic of Part 7 in the original tutorial.  I think UI needs to come earlier in a management game like this.
+
+I spent a lot of time [[href:/x/2226-roguelike-dev/#section-7][last year]] looking at other games. One of the biggest problems I see in colony games is that it's hard to understand what's going on and what to do to fix problems. The interface is a big part of that. I am hoping that the focus on room-by-room building rather than tile-by-tile building will let me make the information display less granular. I might also be able to make some decisions more explicit. For example, instead of "workshop output is taken to the nearest stockpile" as a /tile by tile/ decision, I could ask the player to designated a /room's output/ as being another /room/. Then the information display can be a giant arrow from one room to another.
+
+I'm going to try a UI where you hold down a /modifier key/ to change what the mouse does. Hold down ~R~ to activate room mode, and then click on a room to unlock it. I need to have a mouse click handler that checks for clickable rooms. And I need to have the mouse pointer change when moving over a clickable object. The click handler should take precedence over map dragging.
+
+I decided I would have a /UI mode/ that controls how to render and how to interpret mouse events. The key state controls which UI mode I'm in. However, as usual, this simple model didn't quite work cleanly. There were things I needed to deal with like: when pressing  ~R~, I want to highlight the room under the mouse pointer, but the =keydown= event doesn't include the mouse position. That means I need to be storing the mouse position always, even before I need it. Another case is that when pressing ~R~ then ~Shift~ then releasing ~R~, the =keydown= event tells me ='r'= was pressed but the =keyup= event tells me ='R'= was released. There are some edge cases I'm just not going to deal with for this project, but I want to keep it in mind for future projects.
 
 Not all rooms are unlockable. Rooms must be /connected/ to an already unlocked room. The way my data structures are written, the easiest way to calculate this was to look at all the doors. A door connecting an unlocked room to a locked room means that locked room is unlockable.
 
@@ -169,7 +180,7 @@ Not all rooms are unlockable. Rooms must be /connected/ to an already unlocked r
 </figure>
 #+end_export
 
-I also want rooms to have labels, but I need to size the labels so that they fit. I used the [[https://developer.mozilla.org/en-US/docs/Web/API/TextMetrics][TextMetrics]] feature to resize them:
+I also want rooms to have labels. I think in a management game it's important to see the "big picture", and I think labels can help. I need to size the labels so that they fit. I used the [[https://developer.mozilla.org/en-US/docs/Web/API/TextMetrics][TextMetrics]] feature to resize them:
 
 #+begin_export html
 <figure>
@@ -180,67 +191,132 @@ I also want rooms to have labels, but I need to size the labels so that they fit
 
 The room labels will be "Kitchen", "Dining", "Bedroom", etc. but I haven't implemented room types yet.
 
-* Placing enemies
+Bug: I noticed that on Firefox/Mac, holding down a key causes the cursor to mostly disappear. Weird. This is not only on my site, but on any site.
+
+* Placing enemies (Part 5)
 :PROPERTIES:
 :CUSTOM_ID: placing-enemies
 :END:
 
 Instead of enemies, I have lots of friendly colonist NPCs. They need to have motivations, jobs, inventory, pathfinding, etc.
 
-I want to place objects within rooms. Should I make colonists build those objects, or should they be built immediately? I think immediate is probably easier to implement, but building objects is a great activity for colonists. Given how this project is too ambitious already, I should do the simpler thing. A further simplification would be to have only one type of object per room, and two types of buffer zones (input and output). Then I can have three keys for those three types of things, instead of having a menu to further select types of things. I want multi-tile objects like chair+table in the dining room, but that complicates things, so I should simplify and stick to single tile objects.
+I want to place furniture objects within rooms.  These objects will correspond to the use of the room. For example, a bedroom's furniture will be beds.
 
-* Combat
+#+begin_export html
+<figure>
+  <img src="blog/5-room-types.png" alt="Screenshot" />
+  <figcaption>Needed to assign room types before implementing furniture</figcaption>
+</figure>
+#+end_export
+
+Should I make colonists build the furniture, or should they be built immediately? I think immediate is easier to implement, but building furniture is a great activity for colonists. Given how this project is too ambitious already, I will do the simpler thing.
+
+I had been imagining each furniture would have one tile per input, and one tile per output. The room would have an input storage zone and an output storage zone. Colonists would move items from the input zone to the furniture, and when the furniture has all its inputs filled, a colonist can do that job, filling the furniture's output zone. Then there'd be a job to move items from the furniture to the room's output zone. But I wrote all of this out on paper and decided it needed to be simpler.
+
+So the next plan was for each furniture to have one tile per input, one tile to stand on, and one tile for the sprite. I dropped the furniture's output; I can reserve a spot in the room's output zone (but this means I need to implement a tile reservation system, so it's not clear this is actually simpler). I also dropped the room's input zone. Colonists can take items directly to the furniture's input zone instead of first buffering them in the room. These are /imagined/ simplifications. I don't know if it will make the job system more complex. But I'll try it and see.
+
+I also considered simplifying furthur by having furniture be a single tile, with no tile to stand on and no input tiles. But I imagined what that did to the job system, and I didn't like what my imagination told me. So I'm going to try implementing multi-tile furniture (one tile for the sprite and several tiles reserved for items or colonists).
+
+#+begin_export html
+<figure>
+  <img src="blog/5-furniture.png" alt="Screenshot" />
+  <figcaption>Furniture in a room</figcaption>
+</figure>
+#+end_export
+
+Possible room types and their object types:
+
+| room             | object         | inputs            | outputs     |
+|------------------+----------------+-------------------+-------------|
+| wilderness*      | berry          | -                 | food        |
+| wilderness*      | tree           | -                 | wood        |
+| underground farm | -              | -                 | crops       |
+| mushroom cavern  | -              | -                 | crops       |
+| kitchen          | cooking table  | raw food          | cooked food |
+| dining           | dining table   | cooked food       | -           |
+| bedroom          | bed            | -                 | -           |
+| iron mine        | mining pit     | -                 | iron        |
+| quarry           | mining pit     | -                 | stone       |
+| crafting         | crafting table | wood, stone, iron | crafts      |
+
+I don't know what the "end game" of the production tree will be, but I think /crafts/ could be the cost of opening up later rooms.
+
+I'd also like to have some room unlocks carry bonuses or penalties, like "workahol fountain — your colonists no longer sleep" or "teleporter accident — you double the number of colonists but they work half as hard".
+
+* Combat (Part 6)
 :PROPERTIES:
 :CUSTOM_ID: combat
 :END:
 
-I am considering having a simplified combat as part of the cost of opening up a new room. You'd have to decide how many colonists to send into a new room to defeat the monsters. Send too few, and you might not get the room. What is the downside of sending too many? Maybe they have to rest for a time afterwards, so that reduces your productivity. Is this at all an interesting/fun decision to make? Not sure.
+I had considered having a simplified combat as part of the cost of opening up a new room. You'd have to decide how many colonists to send into a new room to defeat the monsters. Send too few, and you might not get the room. What is the downside of sending too many? Maybe they have to rest for a time afterwards, so that reduces your productivity. Is this at all an interesting/fun decision to make? Not sure.
 
 Another option would be to go the Dungeon Keeper or Tower Defense route, where you have to deal with enemies trickling in. As much as I'd love to make a Dungeon Keeper style game, I think I don't even know how to do the basics so that's something to tackle in a future project.
 
-* Interface
-:PROPERTIES:
-:CUSTOM_ID: interface
-:END:
+In the interests of simplicity, I've decided not to have any combat. I can come back and add it later if I have time. But I am pretty sure I won't have extra time.
 
-I spent a lot of time [[href:/x/2226-roguelike-dev/#section-7][last year]] looking at other games. One of the biggest problems I see in colony games is that it's hard to understand what's going on and what to do to fix problems. The interface is a big part of that. I am hoping that the focus on room-by-room building rather than tile-by-tile building will let me make the information display less granular. I might also be able to make some decisions more explicit. For example, instead of "workshop output is taken to the nearest stockpile" as a /tile by tile/ decision, I could ask the player to designated a /room's output/ as being another /room/. Then the information display can be a giant arrow from one room to another.
-
-* Items and inventory
+* Items and inventory (Part 8)
 :PROPERTIES:
 :CUSTOM_ID: items-and-inventory
 :END:
 
 Items are generated by resource objects, stored in stockpiles, and transformed by workshop objects.
 
-* Ranged scrolls and targeting
+A /transport/ job asks a colonist to take an item from one place to another. But why? Each room needs to generate "demand" for some items, and also "supply" from production. Some rooms like mushroom farms will generate supply over time. Other rooms like crafting will generate supply only when a colonist is working there. Maybe I can unify these two types somehow.
+
+A /production/ job asks a colonists to go to a room and transform some input to some output. The input or output might be empty — for example, in the dining room, the input is food and the output is empty. But that should affect the colonist's hunger level, so I need to track that somewhere and also make it visible somehow. And the colonist shouldn't be asked to do the job unless their internal hunger level is low. Hm. So this means colonists need internal stats.
+
+Let's take an axe-making room as an example:
+
+#+begin_src json
+tool_shop: {
+    furnitureShape: {
+        ticks: 60,
+        stand: Pos(0, 1),
+        inputs: [
+            {type: 'iron', pos: Pos(-1, 0)},
+            {type: 'wood', pos: Pos(0, -1)},
+        ],
+        output: 'axe',
+        sprites: [{type: 'table', pos: Pos(0, 0)}],
+    },
+}
+#+end_src
+
+- =iron= should be placed 1 west of the table (transport job)
+- =wood= should be placed 1 north of the table (transport job)
+- there should be one tile free in the output zone
+
+If these are true, then the output zone tile is reserved for this job, and the production job is enabled. A colonist that has no job currently (and is therefore carrying nothing) can take this production job by moving into the =stand= position 1 south of the table. The colonist will stand there for =60= ticks. The =iron= and =wood= will be consumed, and the colonist will be left holding an =axe=, which needs to be placed in the reserved output zone tile. That tile reservation is freed. And the colonist is now free to take on another job.
+
+* Ranged scrolls and targeting (Part 9)
 :PROPERTIES:
 :CUSTOM_ID: ranged-scrolls-and-targeting
 :END:
 
-I don't have ranged scrolls but I expect to have multiple types of building UIs. Rectangular regions, object placement including rotation, what else?
+I don't have ranged scrolls but I expect to have multiple types of building UIs. In particular, I need to add a UI for rectangular zones. My initial thought was that you will press the key on the top left corner, move the mouse, release the key. But a more conventional UI would be to use the mouse button to mark a rectangle.
 
-* Saving and loading
+* Saving and loading (Part 10)
 :PROPERTIES:
 :CUSTOM_ID: saving-and-loading
 :END:
 
 I'm not going to attempt this. I think it's great to have, but it's not important to me right now.
 
-* Dungeon levels
+* Dungeon levels (Part 11)
 :PROPERTIES:
 :CUSTOM_ID: dungeon-levels
 :END:
 
 In an adventure style game, each dungeon level is standalone, and they increase in difficulty as you progress. In Dwarf Fortress, the levels aren't standalone, but they do increase in difficulty as you dig deeper. But in this game I don't have dungeon levels. Instead, each /room/ could be thought of as a miniature level to conquer.
 
-* Increasing difficulty
+* Increasing difficulty (Part 12)
 :PROPERTIES:
 :CUSTOM_ID: increasing-difficulty
 :END:
 
 In a normal adventure mode roguelike, difficulty increases as you go /down/ into the dungeon. In this game, I'd like to have the difficulty increase as you go /right/ (east) into the mountain.
 
-* Gearing up
+* Gearing up (Part 13)
 :PROPERTIES:
 :CUSTOM_ID: gearing-up
 :END:
@@ -253,9 +329,11 @@ As much as it might be fun to have gear for the colonists, I am going to skip th
 :CUSTOM_ID: conclusion
 :END:
 
+-
+
 #+begin_export html
 <x:footer>
   Created 26 Jun 2023; &#160;
-  <!-- hhmts start -->Last modified: 23 Jul 2023<!-- hhmts end -->
+  <!-- hhmts start -->Last modified: 03 Aug 2023<!-- hhmts end -->
 </x:footer>
 #+end_export

@@ -136,7 +136,8 @@ function addDoors(roomRows, roomCols, rooms) {
 
     /** @type {Set<Door>} */
     let doors = new Set();
-    
+
+    // TODO: don't need to iterate this way since we have the array of rooms?
     for (let r = 0; r < roomRows; r++) {
         for (let q = 0; q < roomCols; q++) {
             let room = roomAt(q, r);
@@ -201,7 +202,9 @@ export function generateMap() {
     };
 }
 
+
 export function unlockRoom(map, room) {
+    if (room.unlocked) throw "Room already unlocked ${JSON.stringify(room)}";
     const {rect} = room;
     room.unlocked = true;
     for (let y = rect.top + 1; y < rect.bottom; y++) {
