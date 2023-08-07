@@ -246,17 +246,19 @@ I'd also like to have some room unlocks carry bonuses or penalties, like "workah
 Multi-tile overlap check algorithm: given a location in a room, I need to figure out whether furniture can be placed there. A helper function can calculate all the positions that the furniture uses up (stand position, input positions, and sprite positions). Then, for each position in the set:
 
 1. check that it's in the room bounds
-2. for each existing furniture in the same room, check that it's not already occupied by that furniture
+1. check that the room is unlocked
+1. for each existing furniture in the same room, check that it's not already occupied by that furniture
 
 I don't have to check against furniture in other rooms, because I've already ensured the new furniture entirely fits into the current room.
 
 #+begin_export html
 <figure>
   <img src="blog/5-good-and-bad-placement-tiles.png" alt="Screenshot" />
-  <figcaption>When placing furniture, mark which tiles can't be built on in red</figcaption>
+  <figcaption>When placing furniture, mark which tiles can/can't be built on</figcaption>
 </figure>
 #+end_export
 
+I had an accidental information leak: the hover message revealed the room type, but if the room was locked, the player shouldn't know the room type yet.
 
 * Combat (Part 6)
 :PROPERTIES:

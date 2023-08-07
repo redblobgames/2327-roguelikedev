@@ -139,7 +139,8 @@ function positionsOccupiedByFurniture(room, pos) {
  * @returns {boolean}
  */
 function isPositionInRoomBuildable(room, pos) {
-    // It needs to be in the room itself
+    // It needs to be in an unlocked room
+    if (!room.unlocked) return false;
     if (!positionInRoom(room, pos)) return false;
     // and it can't overlap with any furniture already in the room
     for (let f of room.furniture) {
@@ -311,6 +312,7 @@ const sprites = await (async function() {
         sprout:     await S("lorc/sprout"),
         table:      await S("delapouite/table"),
         desk:       await S("delapouite/desk"),
+        bed:        await S("delapouite/bed"),
         digdug:     await S("lorc/dig-dug"),
         mining:     await S("lorc/mining"),
         anvil_impact: await S("lorc/anvil-impact"),
@@ -472,13 +474,13 @@ const render = {
             for (let {x, y} of room.furniture) {
                 if (this.view.left <= x && x < this.view.right
                     && this.view.top <= y && y < this.view.bottom) {
-                    let color = furnitureData.color ?? `hsl(300, 100%, 75%)`;
+                    let color = furnitureData.color ?? "white";
                     ctx.lineWidth = 1/(camera.TILE_SIZE/512);
                     ctx.strokeStyle = "black";
                     if (furnitureData.furnitureShape.stand) {
                         this.drawTile(x + furnitureData.furnitureShape.stand.x,
                                       y + furnitureData.furnitureShape.stand.y,
-                                      'footprint', "hsl(120 30% 70% / 0.3)");
+                                      'footprint', "hsl(120 30% 70% / 0.2)");
                     }
                     for (let input of furnitureData.furnitureShape.inputs) {
                         this.drawTile(x + input.pos.x, y + input.pos.y,
@@ -501,7 +503,7 @@ const render = {
     drawFurnitureCandidateAt(pos) {
         pos = Pos(Math.floor(pos.x), Math.floor(pos.y));
         let room = roomAtPosition(pos);
-        if (!room) return; // either invalid pos, or no room
+        if (!room || !room.unlocked) return;
         let positions = positionsOccupiedByFurniture(room, pos).values();
         ctx.save();
         ctx.lineWidth = 1/(camera.TILE_SIZE/512);
@@ -643,15 +645,19 @@ const main = {
         if (room && unlockableRoomList(map).indexOf(room) >= 0) {
             unlockRoom(map, room);
             this.render();
-        }
+        } // TODO: else show error message?
     },
 
     furniture_onClick(event) {
         if (event.button !== 0) return; // left button only
-        let {x, y} = camera.convertCanvasToWorldCoord(convertPixelToCanvasCoord(event));
-        // TODO: need to verify that furniture placement is ok
-        // that should be a shared function since it's also needed by
-        // the renderer to show a preview
+        let pos = camera.convertCanvasToWorldCoord(convertPixelToCanvasCoord(event));
+        pos = Pos(Math.floor(pos.x), Math.floor(pos.y));
+        let room = roomAtPosition(pos);
+        if (!room) return; // either invalid pos, or no room; TODO: show error message?
+        let positions = positionsOccupiedByFurniture(room, pos).values();
+        for (let p of positions) if (!isPositionInRoomBuildable(room, p)) return; // TODO: error message?
+        room.furniture.push(pos);
+        this.render();
     },
 
     onBlur(_event) {
@@ -719,7 +725,12 @@ const main = {
             render.cursor = room?.unlocked ? 'crosshair' : 'no-drop';
             this.render();
             let shape = roomCharacteristics[room?.type]?.furnitureShape;
-            setMessage(room && shape ? `Click to place ${shape.name} in ${room.type}` : "Furniture placement mode");
+            let message = "Move mouse to where you want to build furniture";
+            if (room && room.unlocked) {
+                if (shape) message = `Click to place ${shape.name} in ${room.type}`;
+                else message = "No furniture allowed in this room";
+            }
+            setMessage(message);
             break;
         }
 
