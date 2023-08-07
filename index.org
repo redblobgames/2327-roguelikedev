@@ -215,7 +215,7 @@ I had been imagining each furniture would have one tile per input, and one tile 
 
 So the next plan was for each furniture to have one tile per input, one tile to stand on, and one tile for the sprite. I dropped the furniture's output; I can reserve a spot in the room's output zone (but this means I need to implement a tile reservation system, so it's not clear this is actually simpler). I also dropped the room's input zone. Colonists can take items directly to the furniture's input zone instead of first buffering them in the room. These are /imagined/ simplifications. I don't know if it will make the job system more complex. But I'll try it and see.
 
-I also considered simplifying furthur by having furniture be a single tile, with no tile to stand on and no input tiles. But I imagined what that did to the job system, and I didn't like what my imagination told me. So I'm going to try implementing multi-tile furniture (one tile for the sprite and several tiles reserved for items or colonists).
+I also considered simplifying further by having furniture be a single tile, with no tile to stand on and no input tiles. But I imagined what that did to the job system, and I didn't like what my imagination told me. So I'm going to try implementing multi-tile furniture (one tile for the sprite and several tiles reserved for items or colonists).
 
 #+begin_export html
 <figure>
@@ -242,6 +242,21 @@ Possible room types and their object types:
 I don't know what the "end game" of the production tree will be, but I think /crafts/ could be the cost of opening up later rooms.
 
 I'd also like to have some room unlocks carry bonuses or penalties, like "workahol fountain — your colonists no longer sleep" or "teleporter accident — you double the number of colonists but they work half as hard".
+
+Multi-tile overlap check algorithm: given a location in a room, I need to figure out whether furniture can be placed there. A helper function can calculate all the positions that the furniture uses up (stand position, input positions, and sprite positions). Then, for each position in the set:
+
+1. check that it's in the room bounds
+2. for each existing furniture in the same room, check that it's not already occupied by that furniture
+
+I don't have to check against furniture in other rooms, because I've already ensured the new furniture entirely fits into the current room.
+
+#+begin_export html
+<figure>
+  <img src="blog/5-good-and-bad-placement-tiles.png" alt="Screenshot" />
+  <figcaption>When placing furniture, mark which tiles can't be built on in red</figcaption>
+</figure>
+#+end_export
+
 
 * Combat (Part 6)
 :PROPERTIES:
@@ -270,6 +285,7 @@ Let's take an axe-making room as an example:
 #+begin_src json
 tool_shop: {
     furnitureShape: {
+        name: "table",
         ticks: 60,
         stand: Pos(0, 1),
         inputs: [
@@ -334,6 +350,6 @@ As much as it might be fun to have gear for the colonists, I am going to skip th
 #+begin_export html
 <x:footer>
   Created 26 Jun 2023; &#160;
-  <!-- hhmts start -->Last modified: 03 Aug 2023<!-- hhmts end -->
+  <!-- hhmts start -->Last modified: 07 Aug 2023<!-- hhmts end -->
 </x:footer>
 #+end_export

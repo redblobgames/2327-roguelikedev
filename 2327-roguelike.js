@@ -33,11 +33,11 @@ function convertPixelToCanvasCoord(event) {
 // Simulation
 
 const roomCharacteristics = {
-    // TODO: furniture needs a name
     // map the room type to things we need to know about how the room works
     wilderness: {
         color: "hsl(100 30% 60%)",
         furnitureShape: {
+            name: "berries",
             ticks: 1,
             stand: Pos(0, 0),
             inputs: [],
@@ -51,6 +51,7 @@ const roomCharacteristics = {
     },
     dining: {
         furnitureShape: {
+            name: "table",
             ticks: 20,
             stand: Pos(0, 1),
             inputs: [{type: 'rawfood', pos: Pos(0, 0)}],
@@ -61,6 +62,7 @@ const roomCharacteristics = {
     },
     bedroom: {
         furnitureShape: {
+            name: "bed",
             ticks: 60,
             stand: Pos(0, 0),
             inputs: [],
@@ -72,6 +74,7 @@ const roomCharacteristics = {
     tool_shop: {
         // NOTE: test of multi-input production
         furnitureShape: {
+            name: "crafting",
             ticks: 60,
             stand: Pos(0, 1),
             inputs: [
@@ -83,6 +86,82 @@ const roomCharacteristics = {
         },
     },
 };
+
+/**
+ * Is a position within the bounds of a room?
+ * @param {Pos} pos
+ * @returns {boolean}
+ */
+function positionInRoom(room, pos) {
+    return room.rect.left+1 <= pos.x && pos.x < room.rect.right
+        && room.rect.top+1 <= pos.y && pos.y < room.rect.bottom;
+}
+
+/**
+ * Is there a room at a given position?
+ * @param {Pos} pos
+ * @returns {Room?}
+ */
+function roomAtPosition(pos) {
+    return map.rooms.find((room) => positionInRoom(room, pos));
+}
+
+/**
+ * For a given room, calculate which positions would be occupied by a piece of furniture
+ * @param {Room} room
+ * @param {Pos} pos
+ * @returns {Map<string, Pos>} - a Map instead of a Set because of lack of value types in JS
+ */
+function positionsOccupiedByFurniture(room, pos) {
+    /** @type{Map<string, Pos>} */
+    let result = new Map();
+    function add(relativeCoord) {
+        if (relativeCoord) {
+            let worldCoord = Pos(relativeCoord.x + pos.x, relativeCoord.y + pos.y);
+            result.set(worldCoord.toString(), worldCoord);
+        }
+    }
+
+    const shape = roomCharacteristics[room.type].furnitureShape;
+    if (shape) {
+        add(shape.stand);
+        for (let v of shape.inputs) add(v.pos);
+        for (let v of shape.sprites) add(v.pos);
+    }
+    return result;
+}
+
+
+/**
+ * For a given room, analyze whether 'pos' allows furniture
+ * @param {Room} room
+ * @param {Pos} pos
+ * @returns {{good: Array<Pos>, bad: Array<Pos>}}
+ */
+function analyzeFurniturePlacement(room, pos) {
+    function isPositionGood(p) {
+        // It needs to be in the room itself
+        if (!positionInRoom(room, p)) return false;
+        // and it can't overlap with any furniture already in the room
+        for (let f of room.furniture) {
+            for (let q of positionsOccupiedByFurniture(room, f).values()) {
+                if (p.equals(q)) return false;
+            }
+        }
+        // If we didn't find anything bad, we're good
+        return true;
+    }
+
+    let positions = positionsOccupiedByFurniture(room, pos);
+    /** @type {Array<pos>} */
+    let good = [];
+    /** @type {Array<pos>} */
+    let bad = [];
+    for (let p of positions.values()) {
+        (isPositionGood(p) ? good : bad).push(p);
+    }
+    return {good, bad};
+}
 
 
 class Colonist {
@@ -144,7 +223,7 @@ const map = generateMap(); // global
 for (let room of map.rooms) { // HACK: for testing
     if (room.q < 2) unlockRoom(map, room);
 }
-map.rooms[0].furniture = [Pos(map.rooms[0].rect.left + 2, map.rooms[0].rect.top + 2)];
+map.rooms[0].furniture = [Pos(map.rooms[0].rect.left + 2, map.rooms[0].rect.top + 1)];
 
 const camera = { // global
     pos: Pos(NaN, NaN),
@@ -167,14 +246,14 @@ const camera = { // global
         };
     },
     // For zooming:
-    _z: 10,
+    _z: 4,
     get z() { return this._z; },
     set z(newZ) { this._z = clamp(newZ, 2, 10); },
     get TILE_SIZE() { return 100 / this.z * CANVAS_SCALE; },
     get VIEWWIDTH() { return canvas.width / this.TILE_SIZE; },
     get VIEWHEIGHT() { return canvas.height / this.TILE_SIZE; },
 };
-camera.set(0, 0);
+camera.set(30, 5);
 
 
 //////////////////////////////////////////////////////////////////////
@@ -229,7 +308,7 @@ const sprites = await (async function() {
         const svg = await stream.text();
         return new Path2D(svg.replace(/.* d="/, "").replace(/".*/, ""));
     }
-    
+
     return {
         person:     await S("delapouite/person"),
         rooster:    await S("delapouite/rooster"),
@@ -250,6 +329,9 @@ const sprites = await (async function() {
         hand_saw: await S("delapouite/hand-saw"),
         fishing_pole: await S("delapouite/fishing-pole"),
         watering_can: await S("delapouite/watering-can"),
+        footprint: await S("lorc/footprint"),
+        stop_sign: await S("delapouite/stop-sign"),
+        check_mark: await S("delapouite/check-mark"),
     };
 })();
 
@@ -262,7 +344,7 @@ const render = {
 
     // Local flags to change the rendering
     highlightedRoom: null,
-    
+
     begin() {
         const halfwidth = camera.VIEWWIDTH / 2;
         const halfheight = camera.VIEWHEIGHT / 2;
@@ -289,6 +371,7 @@ const render = {
     },
 
     drawTile(x, y, sprite, color) {
+        if (typeof x !== 'number' || typeof y !== 'number') throw "invalid pos";
         const defaultPath = new Path2D("M 0,0 l 512,0 l 0,512 l -512,0 z");
         ctx.translate(x, y);
         ctx.scale(1/512, 1/512);
@@ -305,6 +388,8 @@ const render = {
         const maxHeight = options.maxHeight ?? Infinity;
         ctx.font = `${scale.toFixed(2)}px monospace`;
         const metrics = ctx.measureText(label);
+        // TODO: bug -- below scale 0.25, firefox doesn't draw anything!
+        // if (scale !== 0.4 && scale !== 2) console.log(scale, metrics)
         if (metrics.width > maxWidth || metrics.actualBoundingBoxAscent > maxHeight) {
             scale *= Math.min(maxWidth / metrics.width, maxHeight / metrics.actualBoundingBoxAscent);
             ctx.font = `${scale.toFixed(2)}px monospace`;
@@ -316,7 +401,7 @@ const render = {
         ctx.strokeText(label, x+0.5, y+0.9);
         ctx.fillText(label, x+0.5, y+0.9);
     },
-    
+
     drawBackground() {
         // Tile backgrounds
         const tileRenders = {
@@ -379,6 +464,7 @@ const render = {
             ctx.fill();
             ctx.globalAlpha = 1.0;
             ctx.stroke();
+            ctx.globalAlpha = camera.z / 10.0;
             this.drawTileLabel(room.unlocked? room.type : "?",
                                (room.rect.left+room.rect.right)/2, room.rect.bottom-1,
                                {
@@ -401,18 +487,49 @@ const render = {
                     let color = furnitureData.color ?? `hsl(300, 100%, 75%)`;
                     ctx.lineWidth = 1/(camera.TILE_SIZE/512);
                     ctx.strokeStyle = "black";
+                    if (furnitureData.furnitureShape.stand) {
+                        this.drawTile(x + furnitureData.furnitureShape.stand.x,
+                                      y + furnitureData.furnitureShape.stand.y,
+                                      'footprint', "hsl(120 30% 70% / 0.3)");
+                    }
+                    for (let input of furnitureData.furnitureShape.inputs) {
+                        this.drawTile(x + input.pos.x, y + input.pos.y,
+                                      input.type, "hsl(120 50% 50% / 0.3)");
+                    }
                     for (let sprite of furnitureData.furnitureShape.sprites) {
-                        console.log(JSON.stringify(sprite))
                         this.drawTile(x + sprite.pos.x, y + sprite.pos.y,
                                       sprite.type, color);
                     }
-                    if (camera.z < 4) this.drawTileLabel("table", x, y);
                 }
             }
         }
         ctx.restore();
     },
-    
+
+    /**
+     * if there's a room at this position, draw yes/no squares
+     * showing whether furniture is allowed
+     */
+    drawFurnitureCandidateAt(pos) {
+        pos = Pos(Math.floor(pos.x), Math.floor(pos.y));
+        let room = roomAtPosition(pos);
+        if (!room) return; // either invalid pos, or no room
+        let overlaps = analyzeFurniturePlacement(room, pos);
+        ctx.save();
+        ctx.lineWidth = 1/(camera.TILE_SIZE/512);
+        ctx.strokeStyle = "black";
+        ctx.globalAlpha = 0.75;
+        for (let p of overlaps.good) {
+            this.drawTile(p.x, p.y, null, "hsl(200 50% 50%)");
+            this.drawTile(p.x, p.y, 'check_mark', "white");
+        }
+        for (let p of overlaps.bad) {
+            this.drawTile(p.x, p.y, null, "hsl(0 75% 50%)");
+            this.drawTile(p.x, p.y, 'stop_sign', "white");
+        }
+        ctx.restore();
+    },
+
     drawCreatures() {
         ctx.save();
         for (let colonist of simulation.colonists) {
@@ -428,7 +545,7 @@ const render = {
         }
         ctx.restore();
     },
-    
+
     all() {
         this.begin();
 
@@ -436,8 +553,9 @@ const render = {
         this.drawRooms();
         this.drawDoors();
         this.drawFurniture();
+        if (main.uiMode === 'furniture') this.drawFurnitureCandidateAt(main.pointerState);
         this.drawCreatures();
-        
+
         this.end();
     },
 };
@@ -451,6 +569,7 @@ const main = {
         // maps to either null if not being held or a timestamp if it is down
         // only keys in this map are tracked (and preventDefault-ed)
         r: null,
+        f: null,
     },
     // last known position of the pointer, in world coordinates
     // TODO: convert the whole program to use sx, sy for screen (canvas) and wx, wy for world
@@ -458,7 +577,7 @@ const main = {
         x: 0,
         y: 0,
     },
-    
+
     init() {
         simulation.init();
         this.render();
@@ -477,18 +596,19 @@ const main = {
         }
     },
 
-    /** @type {'stopped' | 'view' | 'room'} */
+    /** @type {'stopped' | 'view' | 'room' | 'furniture'} */
     get uiMode() {
         if (!document.hasFocus())              return 'stopped';
         if (document.activeElement !== canvas) return 'stopped';
         if (this.keyState.r)                   return 'room';
+        if (this.keyState.f)                   return 'furniture';
         return 'view';
     },
 
     onPointerMove(event) {
         this.pointerState = camera.convertCanvasToWorldCoord(convertPixelToCanvasCoord(event));
     },
-    
+
     view_onPointerDown(event) {
         if (event.button !== 0) return; // left button only
         let {x, y} = convertPixelToCanvasCoord(event);
@@ -503,7 +623,7 @@ const main = {
     view_onPointerCancel(_event) {
         this.dragState = null;
     },
-    
+
     view_onPointerMove(event) {
         if (!this.dragState) return;
         // Invariant: I want the position under the cursor
@@ -528,17 +648,23 @@ const main = {
 
     room_onClick(event) {
         if (event.button !== 0) return; // left button only
-        let {x, y} = camera.convertCanvasToWorldCoord(convertPixelToCanvasCoord(event));
+        let pos = camera.convertCanvasToWorldCoord(convertPixelToCanvasCoord(event));
         // Unlock the room if it's locked
-        let room = map.rooms.find((room) =>
-                room.rect.left+1 <= x && x < room.rect.right
-                && room.rect.top+1 <= y && y < room.rect.bottom);
+        let room = roomAtPosition(pos);
         if (room && unlockableRoomList(map).indexOf(room) >= 0) {
             unlockRoom(map, room);
             this.render();
         }
     },
-    
+
+    furniture_onClick(event) {
+        if (event.button !== 0) return; // left button only
+        let {x, y} = camera.convertCanvasToWorldCoord(convertPixelToCanvasCoord(event));
+        // TODO: need to verify that furniture placement is ok
+        // that should be a shared function since it's also needed by
+        // the renderer to show a preview
+    },
+
     onBlur(_event) {
         // We can't track keys when we don't have focus, so assume they were released
         for (let key of Object.keys(this.keyState)) {
@@ -573,10 +699,13 @@ const main = {
     },
 
     render() {
-        // TODO: render differently based on the ui mode
+        // NOTE: it would be cleaner for this object, to calculate
+        // render flags based on uiMode, but instead I made uiMode
+        // global so that the render functions can look at it and
+        // change their behavior
         render.all();
     },
-    
+
     loop() {
         render.highlightedRoom = null;
         switch (this.uiMode) {
@@ -588,15 +717,20 @@ const main = {
             render.cursor = 'move';
             simulation.simulate();
             this.render();
-            setMessage(`R to see/unlock rooms, or drag the mouse to scroll`);
+            setMessage(`R to unlock rooms, F to place furniture, or drag the mouse to scroll`);
             break;
         case 'room':
-            render.highlightedRoom = map.rooms.find((room) =>
-                room.rect.left+1 <= this.pointerState.x && this.pointerState.x < room.rect.right
-                    && room.rect.top+1 <= this.pointerState.y && this.pointerState.y < room.rect.bottom);
+            render.highlightedRoom = roomAtPosition(this.pointerState);
             render.cursor = unlockableRoomList(map).indexOf(render.highlightedRoom) >= 0 ? 'pointer' : 'cell';
             this.render();
             setMessage("Click to unlock a room");
+            break;
+        case 'furniture':
+            let room = roomAtPosition(this.pointerState);
+            render.cursor = room?.unlocked ? 'crosshair' : 'no-drop';
+            this.render();
+            let shape = roomCharacteristics[room?.type]?.furnitureShape;
+            setMessage(room && shape ? `Click to place ${shape.name} in ${room.type}` : "Furniture placement mode");
             break;
         }
 
