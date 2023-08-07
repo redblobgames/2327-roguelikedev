@@ -133,34 +133,22 @@ function positionsOccupiedByFurniture(room, pos) {
 
 
 /**
- * For a given room, analyze whether 'pos' allows furniture
+ * Is a given position open (buildable) in a room?
  * @param {Room} room
  * @param {Pos} pos
- * @returns {{good: Array<Pos>, bad: Array<Pos>}}
+ * @returns {boolean}
  */
-function analyzeFurniturePlacement(room, pos) {
-    function isPositionGood(p) {
-        // It needs to be in the room itself
-        if (!positionInRoom(room, p)) return false;
-        // and it can't overlap with any furniture already in the room
-        for (let f of room.furniture) {
-            for (let q of positionsOccupiedByFurniture(room, f).values()) {
-                if (p.equals(q)) return false;
-            }
+function isPositionInRoomBuildable(room, pos) {
+    // It needs to be in the room itself
+    if (!positionInRoom(room, pos)) return false;
+    // and it can't overlap with any furniture already in the room
+    for (let f of room.furniture) {
+        for (let p of positionsOccupiedByFurniture(room, f).values()) {
+            if (pos.equals(p)) return false;
         }
-        // If we didn't find anything bad, we're good
-        return true;
     }
-
-    let positions = positionsOccupiedByFurniture(room, pos);
-    /** @type {Array<pos>} */
-    let good = [];
-    /** @type {Array<pos>} */
-    let bad = [];
-    for (let p of positions.values()) {
-        (isPositionGood(p) ? good : bad).push(p);
-    }
-    return {good, bad};
+    // If we didn't find anything bad, we're good
+    return true;
 }
 
 
@@ -514,18 +502,19 @@ const render = {
         pos = Pos(Math.floor(pos.x), Math.floor(pos.y));
         let room = roomAtPosition(pos);
         if (!room) return; // either invalid pos, or no room
-        let overlaps = analyzeFurniturePlacement(room, pos);
+        let positions = positionsOccupiedByFurniture(room, pos).values();
         ctx.save();
         ctx.lineWidth = 1/(camera.TILE_SIZE/512);
         ctx.strokeStyle = "black";
         ctx.globalAlpha = 0.75;
-        for (let p of overlaps.good) {
-            this.drawTile(p.x, p.y, null, "hsl(200 50% 50%)");
-            this.drawTile(p.x, p.y, 'check_mark', "white");
-        }
-        for (let p of overlaps.bad) {
-            this.drawTile(p.x, p.y, null, "hsl(0 75% 50%)");
-            this.drawTile(p.x, p.y, 'stop_sign', "white");
+        for (let p of positions) {
+            if (isPositionInRoomBuildable(room, p)) {
+                this.drawTile(p.x, p.y, null, "hsl(200 50% 50%)");
+                this.drawTile(p.x, p.y, 'check_mark', "white");
+            } else {
+                this.drawTile(p.x, p.y, null, "hsl(0 75% 50%)");
+                this.drawTile(p.x, p.y, 'stop_sign', "white");
+            }
         }
         ctx.restore();
     },
