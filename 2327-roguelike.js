@@ -4,6 +4,8 @@
  * @license Apache-2.0 <https://www.apache.org/licenses/LICENSE-2.0.html>
  */
 
+/// <reference path="types.d.ts"/>
+
 import {Pos, unlockRoom, unlockableRoomList, generateMap} from "./mapgen.js";
 import {clamp} from "./util.js";
 
@@ -18,7 +20,7 @@ canvas.height *= CANVAS_SCALE;
 /** Convert from event coordinate space (on the page) to Canvas coordinate
  * space (assuming there are no transforms on the canvas)
  * @param {PointerEvent} event
- * @returns {Pos}
+ * @returns {Position}
  */
 function convertPixelToCanvasCoord(event) {
     const bounds = canvas.getBoundingClientRect();
@@ -89,7 +91,8 @@ const roomCharacteristics = {
 
 /**
  * Is a position within the bounds of a room?
- * @param {Pos} pos
+ * @param {Room} room
+ * @param {Position} pos
  * @returns {boolean}
  */
 function positionInRoom(room, pos) {
@@ -99,21 +102,22 @@ function positionInRoom(room, pos) {
 
 /**
  * Is there a room at a given position?
- * @param {Pos} pos
+ * @param {Position} pos
  * @returns {Room?}
  */
 function roomAtPosition(pos) {
-    return map.rooms.find((room) => positionInRoom(room, pos));
+    let roomOrDoor = map.walkable.get(pos.toString())?.in;
+    return roomOrDoor?.type ? roomOrDoor : undefined;
 }
 
 /**
  * For a given room, calculate which positions would be occupied by a piece of furniture
  * @param {Room} room
- * @param {Pos} pos
- * @returns {Map<string, Pos>} - a Map instead of a Set because of lack of value types in JS
+ * @param {Position} pos
+ * @returns {Map<string, Position>} - a Map instead of a Set because of lack of value types in JS
  */
 function positionsOccupiedByFurniture(room, pos) {
-    /** @type{Map<string, Pos>} */
+    /** @type{Map<string, Position>} */
     let result = new Map();
     function add(relativeCoord) {
         if (relativeCoord) {
@@ -135,7 +139,7 @@ function positionsOccupiedByFurniture(room, pos) {
 /**
  * Is a given position open (buildable) in a room?
  * @param {Room} room
- * @param {Pos} pos
+ * @param {Position} pos
  * @returns {boolean}
  */
 function isPositionInRoomBuildable(room, pos) {
@@ -170,7 +174,7 @@ class Colonist {
             // If no path, let's find a path to a random destination
             const numberOfDestinations = map.walkable.size;
             let i = Math.floor(Math.random() * numberOfDestinations);
-            let dest = Array.from(map.walkable.values())[i];
+            let dest = Array.from(map.walkable.values())[i].pos;
 
             let bfs = breadthFirstSearch(map, this.pos, dest);
             if (!bfs) {
@@ -208,6 +212,7 @@ const simulation = { // global
 //////////////////////////////////////////////////////////////////////
 // Map
 
+/** @type{GameMap} */
 const map = generateMap(); // global
 for (let room of map.rooms) { // HACK: for testing
     if (room.q < 2) unlockRoom(map, room);
@@ -226,13 +231,14 @@ const camera = { // global
         );
     },
     // For picking:
+    /** @returns {Position} */
     convertCanvasToWorldCoord({x, y}) {
         const left = this.pos.x - this.VIEWWIDTH / 2;
         const top = this.pos.y - this.VIEWHEIGHT / 2;
-        return {
-            x: x / this.TILE_SIZE + left,
-            y: y / this.TILE_SIZE + top,
-        };
+        return Pos(
+            Math.floor(x / this.TILE_SIZE + left),
+            Math.floor(y / this.TILE_SIZE + top),
+        );
     },
     // For zooming:
     _z: 4,
@@ -564,10 +570,7 @@ const main = {
     },
     // last known position of the pointer, in world coordinates
     // TODO: convert the whole program to use sx, sy for screen (canvas) and wx, wy for world
-    pointerState: {
-        x: 0,
-        y: 0,
-    },
+    pointerState: Pos(0, 0),
 
     init() {
         simulation.init();
@@ -651,7 +654,6 @@ const main = {
     furniture_onClick(event) {
         if (event.button !== 0) return; // left button only
         let pos = camera.convertCanvasToWorldCoord(convertPixelToCanvasCoord(event));
-        pos = Pos(Math.floor(pos.x), Math.floor(pos.y));
         let room = roomAtPosition(pos);
         if (!room) return; // either invalid pos, or no room; TODO: show error message?
         let positions = positionsOccupiedByFurniture(room, pos).values();

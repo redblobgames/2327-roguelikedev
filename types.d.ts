@@ -22,3 +22,13 @@ type Room = {
     unlocked: boolean;
     furniture: Array<Position>;
 };
+
+type GameMap = {
+    bounds: Rect;
+    tiles: { get(pos: Position): string; };
+    roomRows: number; roomCols: number;
+    rooms: Array<Room>;
+    walkable: Map<string, {pos: Position; in: Room|Door}>;
+    wildernessEnds: Map<string, number>;
+    doors: Set<Door>;
+};

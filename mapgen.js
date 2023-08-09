@@ -6,7 +6,7 @@
  * Map generation
  */
 
-/// <reference path="mapgen.d.ts"/>
+/// <reference path="types.d.ts"/>
 
 import {offgridCellToRect} from "./offgrid.js";
 import {lerp} from "./util.js";
@@ -67,6 +67,7 @@ function generateRooms(bounds) {
     // 1. To the *left* of the leftmost room, all tiles are walkable.
     //    I need to calculate the leftmost wall for this.
     // 2. Within each room, all tiles are walkable.
+    /** @type{Map<string, {pos: Position, in: Room|Door}>} */
     let walkable = new Map();
     let wildernessEnds = new Map();
     for (let y = bounds.top; y < bounds.bottom; y++) {
@@ -112,7 +113,7 @@ function generateRooms(bounds) {
         for (let x = bounds.left; x < wildernessEnds.get(y); x++) {
             let pos = Pos(x, y);
             if (wildernessMap(pos) !== 'river') {
-                walkable.set(pos.toString(), pos);
+                walkable.set(pos.toString(), {pos, in: WILDERNESS_ROOM});
             }
         }
     }
@@ -174,6 +175,9 @@ function addDoors(roomRows, roomCols, rooms) {
     return {doors};
 }
 
+/**
+ * @returns {GameMap}
+ */
 export function generateMap() {
     const bounds = {left: 0, right: 100, top: 0, bottom: 100};
 
@@ -203,6 +207,10 @@ export function generateMap() {
 }
 
 
+/**
+ * @param {GameMap} map
+ * @param {Room} room
+ */
 export function unlockRoom(map, room) {
     if (room.unlocked) throw "Room already unlocked ${JSON.stringify(room)}";
     const {rect} = room;
@@ -210,12 +218,12 @@ export function unlockRoom(map, room) {
     for (let y = rect.top + 1; y < rect.bottom; y++) {
         for (let x = rect.left + 1; x < rect.right; x++) {
             let pos = Pos(x, y);
-            map.walkable.set(pos.toString(), pos);
+            map.walkable.set(pos.toString(), {pos, in: room});
         }
     }
     for (let door of map.doors) {
         if (door.room1 === room || door.room2 === room) {
-            map.walkable.set(door.pos.toString(), door.pos);
+            map.walkable.set(door.pos.toString(), {pos: door.pos, in: door});
         }
     }
 }
@@ -224,6 +232,7 @@ const UNLOCKABLE_ROOM_LIMIT = 3;
 /**
  * Unlockable rooms are connected to an unlocked
  * room AND are limited in number
+ * @param {GameMap} map
  */
 export function unlockableRoomList(map) {
     let candidates = /** @type {Set<Room>} */(new Set());
