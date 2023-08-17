@@ -1,5 +1,6 @@
 #+title: Summer Roguelike project
 #+date: <2023-06-26 Mon>
+#+property: header-args:dot    :cache yes
 #+options: toc:nil
 
 Each summer r/roguelikedev has a [[https://old.reddit.com/r/roguelikedev/wiki/python_tutorial_series][summer event]] in which we all make a simple roguelike, roughly following the libtcod roguelike tutorial. [[href:/x/2226-roguelike-dev/][Last year I tried to clone Dwarf Fortress]] in 40 hours. That was too ambitious. But I did enjoy working on a "fortress mode" project more than an "adventure mode" project, so I'd like to do something like that this year, but with a smaller scope.
@@ -246,6 +247,7 @@ I'd also like to have some room unlocks carry bonuses or penalties, like "workah
 ** Multi-tile objects
 :PROPERTIES:
 :CUSTOM_ID: placing-multi-tile-furniture
+:END:
 
 I haven't worked with multi-tile objects before. These will be furniture, not moving objects, so it's simpler. To place the furniture, I need to figure out whether all of its positions are unoccupied. A helper function can calculate all the positions that the furniture uses up (stand position, input positions, and sprite positions). Then, for each position in the set:
 
@@ -271,9 +273,9 @@ I had an accidental information leak: the hover message revealed the room type, 
 
 I already implemented pathfinding earlier, using the =walkable= map, but now I have furniture. If I make furniture /block/ paths then I also need to make sure that the player can't place furniture that blocks access to the room. So I decided instead that furniture would /slow/ but not block the colonists.
 
-This means I need to switch from the unweighted pathfinder (breadth first search) to a weighted pathfinder (like Dijsktra's). There are only two weights though, 1 for an unoccupied tile and 4 for a tile containing furniture or item. This means the implementation can be a little simpler than a full Dijkstra's Algorithm. Instead of a sorted frontier of tiles, I can have 5 unsorted sets of tiles, one for each weight relative to the lowest weight (0, 1, 2, 3, 4).
+This means I need to switch from the unweighted pathfinder (breadth first search) to a weighted pathfinder (like Dijsktra's). There are only two weights though, 1 for an unoccupied tile and 4 for a tile containing furniture or item. This means the implementation can be a little simpler than a full Dijkstra's Algorithm. Instead of a sorted frontier of tiles, I can have 5 unsorted sets of tiles, one for each weight relative to the lowest weight (0, 1, 2, 3, 4). However, the [[https://www.redblobgames.com/pathfinding/a-star/implementation.html#ties-checkerboard-neighbors][tie-breaking hack]] that made paths look better doesn't work when adding movement costs. Instead, I need a [[https://www.redblobgames.com/pathfinding/a-star/implementation.html#ties-checkerboard-costs][different tie-breaking hack]], which means I have more than 5 unsorted sets. I think the BFS tie-breaking /might/ work, but … I should implement something now, and optimize later.
 
-Separately, I'd like to make the movement match. I can do that by repeating the slow tiles in the movement path array, so for example if tile =A= is fast and tile =B= is slow then the stored path can be =[A, B, B, B, B]= so that the colonist would take 4 ticks on tile =B=.
+Separately, I'd like to make the movement match. I can do that by repeating the slow tiles in the movement path array, so for example if tile =A= is fast and tile =B= is slow then the stored path can be =[A, B, B, B, B]= so that the colonist would take 4 ticks on tile =B=. But I think this is a low priority for me. The main goal is to make the paths avoid the slow tiles. If they avoid slow tiles, then it doesn't matter if the slow tiles are actually slow. So I'm going to skip this for now.
 
 To implement pathfinding, I need to quickly look up whether a tile is occupied, so that I can determine the movement cost. I could build a global =occupied= map from position to furniture|item, but I decided instead to make a per-room =occupied= map.
 
@@ -304,6 +306,8 @@ A /transport/ job asks a colonist to take an item from one place to another. But
 
 A /production/ job asks a colonists to go to a room and transform some input to some output. The input or output might be empty — for example, in the dining room, the input is food and the output is empty. But that should affect the colonist's hunger level, so I need to track that somewhere and also make it visible somehow. And the colonist shouldn't be asked to do the job unless their internal hunger level is low. Hm. So this means colonists need internal stats.
 
+For simplicity, *only furniture* can generate jobs.  Nothing else generates jobs. For example, a colonist being hungry does /not/ generate a job to go get food. Instead, the dining table generates a job to bring food to it, and also generates a job to have a hungry colonist eat there.
+
 Let's take an axe-making room as an example:
 
 #+begin_src json
@@ -322,16 +326,41 @@ tool_shop: {
 }
 #+end_src
 
+The furniture in this room is a /table/, and it has some requirements:
+
 - =iron= should be placed 1 west of the table (transport job)
 - =wood= should be placed 1 north of the table (transport job)
-- there should be one tile free in the output zone
 
-If these are true, then the output zone tile is reserved for this job, and the production job is enabled. A colonist that has no job currently (and is therefore carrying nothing) can take this production job by moving into the =stand= position 1 south of the table. The colonist will stand there for =60= ticks. The =iron= and =wood= will be consumed, and the colonist will be left holding an =axe=, which needs to be placed in the reserved output zone tile. That tile reservation is freed. And the colonist is now free to take on another job.
+We'll want a colonist to bring an iron and a wood to their respective tiles, then we'll want a colonist to stand at the furniture for 60 ticks. That'll consume the iron and wood, and produce an axe in the colonist's inventory. The colonist will then drop it off somewhere in the room. I think the furniture's state diagram would be something like this:
 
-** Items
+#+begin_src dot :file build/furniture-state.png :exports results
+digraph {
+    node [fontname=Helvetica, fontsize=12, shape=egg, style=filled, color="#aaaaaa", fillcolor="#eeeeee"];
+    edge [fontname=Courier, fontsize=10, fontcolor="#444422", color="#999999", fillcolor="#ffffff"];
+
+    wait2 [label="waiting for\niron and wood"];
+    iron [label="waiting for\niron"];
+    wood [label="waiting for\nwood"];
+    colonist [label="waiting for\ncolonist"];
+    process [label="crafting\n(60 ticks)"];
+    delivery [label="dropping\noff axe"];
+    wait2 -> iron -> colonist;
+    wait2 -> wood -> colonist;
+    colonist -> process -> delivery -> wait2;
+}
+#+end_src
+
+#+results:
+[[file:build/furniture-state.png]]
+
+*This is going to be tricky to implement*.
+
+** Item transitions
 :PROPERTIES:
 :CUSTOM_ID: items
 :END:
+
+Picking up and dropping off items are both used in several places so I will make helper functions for those state transitions.
 
 I need to figure out how to store items. An item can be on the floor or carried by a colonist. That means its =pos= is of type =pos: Position | Colonist=. For pathfinding I also have an =occupied= map from position to =Furniture | Item | null=. So the transitions will be:
 
@@ -341,6 +370,142 @@ I need to figure out how to store items. An item can be on the floor or carried 
 1. Colonist drops item: ensure =occupied[newpos]= is =null=, set =occupied[newpos]= to =item=, set =item.pos= to =newpos=, and set =colonist.inventory= to =null=.
 
 I like to write down these transitions before coding them. I want to make sure that related data structures are kept in sync.
+
+** Job candidates
+:PROPERTIES:
+:CUSTOM_ID: job-system-candidates
+:END:
+
+TODO: I've worked this out on paper but haven't implemented or tested it.
+
+If /any/ of the input requirements aren't met (=tile= is empty), then we'll create a *transport job* for each of them.
+
+#+begin_src dot :file build/transport-job.png :exports results
+digraph {
+    node [fontname=Helvetica, fontsize=12, shape=egg, style=filled, color="#aaaaaa", fillcolor="#eeeeee"];
+    edge [fontname=Courier, fontsize=10, fontcolor="#444422", color="#999999", fillcolor="#ffffff"];
+    
+    rankdir=LR;
+    "transport job" -> pickup [label="1"];
+    pickup -> dropoff [label="2"];
+    dropoff -> done [label="3"];
+}
+#+end_src
+
+#+results:
+[[file:build/transport-job.png]]
+
+1. An item needs to be available somewhere (with the correct =tile.type=, and =tile.job= is null), 
+   and a colonist needs to be available (=colonist.job= set to null, and =colonist.inventory= is null). 
+   Create a =TransportJob= object with =colonist= and =item= set. Set =colonist.job=, =item.job=, =tile.job= to point to this new job object. Set the colonist to find a path to =item.pos=. Set =job.phase= to /pickup/.
+2. The colonist has reached the =item=, and should pick it up. Set =item.pos= to =colonist=. Set =colonist.inventory= to =item=. Set the colonist to find a path to =tile=. Set =job.phase= to /dropoff/. 
+3. The colonist has reached the =tile=, and should drop the =item=. Set =item.pos= to =tile=. Set =colonist.inventory= to null. Set =colonist.job=, =item.job=, =tile.job= to null. Set =job.phase= to /done/. Remove the job from the jobs list.
+
+That's a lot of error-prone code. A lot of objects are pointing to each other temporarily. I'd like to find a simpler representation. If this were SQL I'd create a =jobs= table with =(phase, colonist, item, tile)= with an index on all the fields. Maybe that's the way to go here, even without the index. Hm. Something to ponder.
+
+If all the inputs are filled, the furniture creates a *production job*.
+
+#+begin_src dot :file build/production-job.png :exports results
+digraph {
+    node [fontname=Helvetica, fontsize=12, shape=egg, style=filled, color="#aaaaaa", fillcolor="#eeeeee"];
+    edge [fontname=Courier, fontsize=10, fontcolor="#444422", color="#999999", fillcolor="#ffffff"];
+    
+    rankdir=LR;
+    "production job" -> move [label="1"];
+    move -> work [label="2"];
+    work -> deliver [label="3"];
+    deliver -> done [label="4"];
+}
+#+end_src
+
+#+results:
+[[file:build/production-job.png]]
+
+1. The furniture needs to be unused (=stand.job= is null), a colonist needs to be available (=colonist.job= is null, =colonist.inventory= is null), and some output tile in the room needs to be open (neither reserved nor occupied).  
+  Some jobs may require a colonist to have some status (like =colonist.hungry=).
+   Create a =ProductionJob=. Set =stand.job=, =colonist.job=, and =dest.job= to this job. Set the colonist to find a path to =stand=. Set the job phase to /move/.
+2. The colonist has reached the =stand= position, and should start working. Set =job.timeCompleted= to the current time plus =ticks=. Set the job phase to /work/.
+3. The current time is past =job.timeCompleted=. Destroy the input objects. Create an output object, and put it into =colonist.inventory=. Set the item's =.pos= to the colonist. Set the colonist to find a path to =dest=. Set =stand.job= to null (this frees up the furniture to start another job). Set the job phase to /deliver/.
+4. The colonist has reached the delivery point, and should drop the item. Set =item.pos= to =dest=. Set =colonist.inventory= to null. Set =colonist.job= and =dest.job= to null. If the job required the colonist to have some status, clear that status. Set the job phase to /done/. Remove the job from the jobs list.
+
+Again, there's a lot of complexity here, and it's setting off my "error prone! error prone!" alarm bells.
+
+There are some invariants I should write down, such as:
+
+- =colonist.inventory= can only be non-null while =colonist.job= is non-null
+
+** Data structures & ECS
+:PROPERTIES:
+:CUSTOM_ID: job-datastructure-design
+:END:
+
+There are a whole lot of state transitions that I want to get right. One way to choose a data structure is to /list the desired operations/. So I made a list:
+
+1. Find an available /item/ with a given =.type= and that's not being used (=.job= is null). Probably better to pick a /nearby/ item.
+2. Find an available /colonist/ that's free (=.job= is null), not holding anything (=.inventory= is null, but this is implied by having no active job), and optionally having some status (like /hungry/).
+3. Find an available /tile/ in a given room that's free (=.job= is null, no item placed there).
+4. Find all currently active Production jobs in the /work/ state that have their =timeCompleted= past expiration.
+5. Find all furniture that's not currently used (=.stand.job= is null).
+6. Find all furniture that has some input not filled (no item on that input tile).
+
+Is that it? Since the number of items of a given type, the number of colonists, and the number of tiles in a room are not too many, maybe the simplest thing is to search an array. If it turns out to be a problem I can build an index later.
+
+In Object Oriented Programming we might model the connection this way, with objects pointing to each other:
+
+#+begin_src dot :file build/data-objects.png :exports results
+digraph {
+    /* https://graphviz.org/doc/info/shapes.html#record */
+    node [fontname=Helvetica, fontsize=12, shape=record, style=filled, color="#aaaaaa", fillcolor="#eeeeee"];
+    edge [fontname=Courier, fontsize=10, fontcolor="#444422", color="#999999", fillcolor="#aaaaaa"];
+
+    rankdir=LR;
+    colonist [label="Colonist|<pos> pos|<job> job|<inventory> inventory"];
+    item [label="Item|<type> type|<pos> pos|<job> job"];
+    job [label="Job|<colonist> colonist|<item> item"];
+
+    colonist:inventory -> item:n;
+    colonist:job -> job:n;
+    item:pos -> colonist:n;
+    item:job -> job:n;
+    job:colonist -> colonist:n;
+    job:item -> item:n;
+}
+#+end_src
+
+#+results[280034eec18cc589548c006b5929339dd52b51dc]:
+[[file:build/data-objects.png]]
+
+
+
+In the [[https://en.wikipedia.org/wiki/Relational_model][Relational programming model]], we would store the connections /outside/ the objects, in a table:
+
+#+begin_src dot :file build/data-relations.png :exports results
+digraph {
+    /* https://graphviz.org/doc/info/shapes.html#record */
+    node [fontname=Helvetica, fontsize=12, shape=record, style=filled, color="#aaaaaa", fillcolor="#eeeeee"];
+    edge [fontname=Courier, fontsize=10, fontcolor="#444422", color="#999999", fillcolor="#aaaaaa"];
+
+    rankdir=LR;
+    colonist [label="Colonist Table|{<c1> C1 | pos| inventory}|{C2 | pos | inventory}|..."];
+    item [label="Item Table|{<i1> I1 | type| pos}|{I2 | type | pos}|..."];
+    job [label="Jobs Table|{J1 | <colonist> colonist C1|<item> item I1}|{J2 | colonist C4 | item I8}|..."];
+
+    job:colonist -> colonist:c1;
+    job:item -> item:i1;
+}
+#+end_src
+
+#+results[8a98f543d3fd874b7caaf1157303097c64f75250]:
+[[file:build/data-relations.png]]
+
+In the Object Oriented model, when you have the object, you can look up the fields. For example, if you have a =colonist= you can find out the =colonist.job=. But if you had the =job= you can't look up which colonist has it. That's why we have to store the redundant =job.colonist= field. And it's up to us to make sure the bidirectional link is maintained. In the Relational model, you can look up in /any/ direction. You can ask the Jobs table which colonist has item I1, /or/ you can ask the same Jobs table which item does colonist C1 carry. There's no redundancy so the data is simpler to keep correct.
+
+Note that the Entity-Component-System (ECS) model is a subset of the Relational model, typically with one primary table for entities that links with one side table per component. But I'm not trying to set up an ECS here.
+
+Since my priority here is to reduce errors, I'm going to try using the Relational model here. For performance, the tables can have indices for each column we want to use for lookup. I can add that later if I need to.
+
+*TL;DR Instead of maintaining /both/ ~x.y = y~ and ~y.x = x~ I will simplify by storing only one of them* and then doing a search to find the other direction.
+
 
 * Ranged scrolls and targeting (Part 9)
 :PROPERTIES:
@@ -388,6 +553,6 @@ As much as it might be fun to have gear for the colonists, I am going to skip th
 #+begin_export html
 <x:footer>
   Created 26 Jun 2023; &#160;
-  <!-- hhmts start -->Last modified: 09 Aug 2023<!-- hhmts end -->
+  <!-- hhmts start -->Last modified: 16 Aug 2023<!-- hhmts end -->
 </x:footer>
 #+end_export
