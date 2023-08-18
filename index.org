@@ -362,14 +362,34 @@ digraph {
 
 Picking up and dropping off items are both used in several places so I will make helper functions for those state transitions.
 
-I need to figure out how to store items. An item can be on the floor or carried by a colonist. That means its =pos= is of type =pos: Position | Colonist=. For pathfinding I also have an =occupied= map from position to =Furniture | Item | null=. So the transitions will be:
+I need to figure out how to store items. An item can be on the floor or carried by a colonist. That means its =pos= is of type =pos: Position | Colonist=. For pathfinding I also have an =occupied= map from position to =Furniture | Item | null=. The only way to create an item is with crafting, so the items will be placed into a colonist's inventory. The only way to consume an item is with crafting, so the items will disappear from the /input/ tile of furniture. So the transitions will be:
 
-1. Item created on the ground (e.g. berries): create an =item=, ensure =occupied[item.pos]= is =null=, and set =occupied[item.pos]= to =item=.
-1. Item is consumed on the ground (e.g. crafting): set =occupied[item.pos]= to =null=, set =item.pos= to =null=, and destroy =item=.
-1. Colonist picks up item: ensure =colonist.inventory= is =null=, set =occupied[item.pos]= to null, set =item.pos= to the colonist, and set =colonist.inventory= to =item=.
-1. Colonist drops item: ensure =occupied[newpos]= is =null=, set =occupied[newpos]= to =item=, set =item.pos= to =newpos=, and set =colonist.inventory= to =null=.
+1. Item created in a colonist's inventory:
+  - ensure =colonist.inventory= is =null=
+  - create an =item= (add new object to global =items= list)
+  - set =item.pos= to =colonist=
+  - set =colonist.inventory= to =item=
+1. Item is consumed on the ground: 
+  - ensure =item.pos= is on the ground
+  - set =occupied[item.pos]= to =null=
+  - set =item.pos= to =null=
+  - destroy =item= (remove from global =items= list)
+1. Colonist picks up item: 
+  - ensure =item.pos= is equal to =colonist.pos=
+  - ensure =colonist.inventory= is =null=
+  - set =occupied[item.pos]= to null
+  - set =item.pos= to =colonist=
+  - set =colonist.inventory= to =item=
+1. Colonist drops item: 
+  - ensure =occupied[colonist.pos]= is =null=
+  - ensure =item.pos= is =colonist=
+  - set =occupied[newpos]= to =item=
+  - set =item.pos= to =colonist.pos=
+  - set =colonist.inventory= to =null=
 
 I like to write down these transitions before coding them. I want to make sure that related data structures are kept in sync.
+
+/TODO: I don't actually have an =occupied[]= map yet/, but instead I'm searching over all items.
 
 ** Job candidates
 :PROPERTIES:
@@ -553,6 +573,6 @@ As much as it might be fun to have gear for the colonists, I am going to skip th
 #+begin_export html
 <x:footer>
   Created 26 Jun 2023; &#160;
-  <!-- hhmts start -->Last modified: 16 Aug 2023<!-- hhmts end -->
+  <!-- hhmts start -->Last modified: 17 Aug 2023<!-- hhmts end -->
 </x:footer>
 #+end_export

@@ -2,7 +2,7 @@ type Position = {x: number; y: number; toString(): string; equals(p: Position): 
 type Rect = {left: number; right: number; top: number; bottom: number;};
 
 type ItemType = 'rawfood' | 'cookedfood';
-type Item = {pos: Position | Object; type: ItemType;};
+type Item = {type: ItemType; pos: Position | Object;};
 
 type FurnitureShape = {
     stand: Position;
@@ -31,4 +31,5 @@ type GameMap = {
     walkable: Map<string, {pos: Position; in: Room|Door}>;
     wildernessEnds: Map<string, number>;
     doors: Set<Door>;
+    items: Array<Item>;
 };

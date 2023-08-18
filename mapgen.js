@@ -179,7 +179,7 @@ function addDoors(roomRows, roomCols, rooms) {
  * @returns {GameMap}
  */
 export function generateMap() {
-    const bounds = {left: 0, right: 100, top: 0, bottom: 100};
+    const bounds = {left: 0, right: 100, top: 0, bottom: 60};
 
     const {roomRows, roomCols, rooms, walkable, wildernessEnds} = generateRooms(bounds);
     const {doors} = addDoors(roomRows, roomCols, rooms);
@@ -203,6 +203,7 @@ export function generateMap() {
         walkable,
         wildernessEnds,
         doors,
+        items: [],
     };
 }
 

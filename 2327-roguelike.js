@@ -164,17 +164,47 @@ class Colonist {
         /** @type {Position[]} - reverse order of tiles to visit */
         this.path = [];
         // TODO: status like sleepiness, hunger - would go up over time
+        /** @type {Item | null} - can hold one item */
+        this.inventory = null;
     }
 
     simulate() {
+        function randomDestination() {
+            const numberOfDestinations = map.walkable.size;
+            let i = Math.floor(Math.random() * numberOfDestinations);
+            return Array.from(map.walkable.values())[i].pos;
+        }
+
         if (this.path.length > 0) {
             // If there's a path, we'll move one step closer to the goal
             this.pos = this.path.pop();
         } else {
-            // If no path, let's find a path to a random destination
-            const numberOfDestinations = map.walkable.size;
-            let i = Math.floor(Math.random() * numberOfDestinations);
-            let dest = Array.from(map.walkable.values())[i].pos;
+            // HACK: pickup/dropoff test with one colonist and one item
+
+            /** @type {Position} */
+            let dest; // decide where to go
+
+            // No path, want to pick up or drop off an item
+            let item = findItemOnTile(this.pos);
+            if (!this.inventory && item) {
+                // Ok, the item is right here, so let's pick it up
+                // and take it to a random place
+                itemPickUp(this, item);
+                dest = randomDestination();
+            } else if (!this.inventory) {
+                // No item here, and we're carrying nothing,
+                // so let's go pick up an item
+                dest = map.items[0].pos; // assume it's on the ground
+            } else if (item) {
+                // We are carrying the item, but can't
+                // drop it here, so find a place to drop
+                dest = randomDestination();
+            } else {
+                // We already are carrying the item, and
+                // we can drop it here
+                itemDrop(this, this.inventory);
+                dest = randomDestination();
+            }
 
             let bfs = breadthFirstSearch(map, this.pos, dest);
             if (!bfs) {
@@ -200,6 +230,9 @@ const simulation = { // global
                 this.colonists.push(new Colonist(Pos(x, y)));
             }
         }
+        // HACK: pickup/dropoff test with one colonist and one item
+        this.colonists.splice(1);
+        itemCreate('rawfood', this.colonists[0]);
     },
     simulate() {
         this.tickId++;
@@ -208,6 +241,75 @@ const simulation = { // global
         }
     },
 };
+
+//////////////////////////////////////////////////////////////////////
+// Items
+
+/**
+ * @param {Position | Object} pos
+ * @returns {pos is Position}
+ */
+function isItemPosOnGround(pos) {
+    return pos && 'x' in pos;
+}
+
+/**
+ * @param {Position} pos
+ * @returns {Item | null}
+ */
+function findItemOnTile(pos) {
+    for (let item of map.items) {
+        if (isItemPosOnGround(item.pos) && pos.equals(item.pos)) return item;
+    }
+    return null;
+}
+
+/**
+ * @param {ItemType} type
+ * @param {Colonist} colonist
+ * @returns {Item}
+ */
+function itemCreate(type, colonist) {
+    if (colonist.inventory !== null) throw `Can't create item ${type}, colonist inventory not empty`;
+    let item = {type, pos: colonist};
+    map.items.push(item);
+    colonist.inventory = item;
+    return item;
+}
+
+/**
+ * @param {Item} item
+ */
+function itemDestroy(item) {
+    if (!isItemPosOnGround(item.pos)) throw `Can't destroy ${item} unless on the ground`;
+    item.pos = null;
+    let i = map.items.indexOf(item);
+    if (i < 0) throw `Item ${item} not found in items list`;
+    map.items.splice(i, 1);
+}
+
+/**
+ * @param {Colonist} colonist;
+ * @param {Item} item
+ */
+function itemPickUp(colonist, item) {
+    let pos = item.pos;
+    if (isItemPosOnGround(pos) && !colonist.pos.equals(pos)) throw `Can't pick up item ${item.type}, not where colonist is`;
+    if (colonist.inventory !== null) throw `Can't pick up item ${item.type}, colonist inventory not empty`;
+    item.pos = colonist;
+    colonist.inventory = item;
+}
+
+/**
+ * @param {Item} item
+ * @param {Colonist} colonist;
+ */
+function itemDrop(colonist, item) {
+    if (item.pos !== colonist) throw `Can't drop item ${item.type} that's not carried`;
+    if (findItemOnTile(colonist.pos) !== null) throw `Can't drop item ${item.type} because tile occupied`;
+    item.pos = colonist.pos;
+    colonist.inventory = null;
+}
 
 //////////////////////////////////////////////////////////////////////
 // Map
@@ -309,7 +411,7 @@ const sprites = await (async function() {
         rooster:    await S("delapouite/rooster"),
         grass:      await S("delapouite/grass"),
         wheat:      await S("lorc/wheat"),
-        grain_bundle: await S("delapouite/grain-bundle"),
+        rawfood:    await S("delapouite/grain-bundle"),
         wall:       await S("delapouite/stone-wall"),
         cactus:     await S("delapouite/cactus"),
         door:       await S("delapouite/door"),
@@ -366,16 +468,17 @@ const render = {
         ctx.restore();
     },
 
-    drawTile(x, y, sprite, color) {
+    drawTile(x, y, sprite, color, options={}) {
         if (typeof x !== 'number' || typeof y !== 'number') throw "invalid pos";
         const defaultPath = new Path2D("M 0,0 l 512,0 l 0,512 l -512,0 z");
+        ctx.save();
         ctx.translate(x, y);
         ctx.scale(1/512, 1/512);
+        if (options.scale) ctx.scale(options.scale, options.scale);
         ctx.stroke(sprites[sprite] ?? defaultPath);
         ctx.fillStyle = color;
         ctx.fill(sprites[sprite] ?? defaultPath);
-        ctx.scale(512, 512);
-        ctx.translate(-x, -y);
+        ctx.restore();
     },
 
     drawTileLabel(label, x, y, options={}) {
@@ -543,6 +646,25 @@ const render = {
         ctx.restore();
     },
 
+    drawItems(where) {
+        ctx.save();
+        for (let item of map.items) {
+            let pos =
+                (where === 'ground' && isItemPosOnGround(item.pos)) ? item.pos
+                : (where === 'inventory' && !isItemPosOnGround(item.pos)) ? item.pos.pos
+                : null;
+            if (!pos) continue;
+            if (this.view.left <= pos.x && pos.x < this.view.right
+                && this.view.top <= pos.y && pos.y < this.view.bottom) {
+                let color = `hsl(200 50% 50%)`;
+                ctx.lineWidth = 1/(camera.TILE_SIZE/512);
+                ctx.strokeStyle = "black";
+                this.drawTile(pos.x, pos.y, item.type, color, {scale: where === 'ground'? 1.0 : 0.4});
+            }
+        }
+        ctx.restore();
+    },
+
     all() {
         this.begin();
 
@@ -551,7 +673,9 @@ const render = {
         this.drawDoors();
         this.drawFurniture();
         if (main.uiMode === 'furniture') this.drawFurnitureCandidateAt(main.pointerState);
+        this.drawItems('ground');
         this.drawCreatures();
+        this.drawItems('inventory');
 
         this.end();
     },
