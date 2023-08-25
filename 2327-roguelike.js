@@ -641,6 +641,16 @@ const render = {
                 ctx.strokeStyle = "black";
                 this.drawTile(x, y, 'person', color);
                 if (camera.z < 4) this.drawTileLabel("dwarf", x, y);
+                ctx.lineWidth = 0.1;
+                ctx.strokeStyle = "hsl(0 0% 100% / 0.25)";
+                ctx.translate(0.5, 0.5);
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                for (let i = colonist.path.length-1; i >= 0; i--) {
+                    ctx.lineTo(colonist.path[i].x, colonist.path[i].y);
+                }
+                ctx.stroke();
+                ctx.translate(-0.5, -0.5);
             }
         }
         ctx.restore();
