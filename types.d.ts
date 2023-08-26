@@ -1,3 +1,5 @@
+type Colonist;
+
 type Position = {x: number; y: number; toString(): string; equals(p: Position): boolean;};
 type Rect = {left: number; right: number; top: number; bottom: number;};
 
@@ -32,4 +34,14 @@ type GameMap = {
     wildernessEnds: Map<string, number>;
     doors: Set<Door>;
     items: Array<Item>;
+};
+
+type Job = {
+    id: number;
+    type: string;
+    room: Room;
+    furniture: Position;
+    colonist: Colonist;
+    item: Item;
+    dest: Position?;
 };

@@ -158,7 +158,11 @@ function isPositionInRoomBuildable(room, pos) {
 
 
 class Colonist {
+    static _id = 0;
+
     constructor(pos) {
+        /** @type {number} */
+        this.id = ++Colonist._id;
         /** @type {Position} */
         this.pos = pos;
         /** @type {Position[]} - reverse order of tiles to visit */
@@ -179,42 +183,21 @@ class Colonist {
             // If there's a path, we'll move one step closer to the goal
             this.pos = this.path.pop();
         } else {
-            // HACK: pickup/dropoff test with one colonist and one item
-
-            /** @type {Position} */
-            let dest; // decide where to go
-
-            // No path, want to pick up or drop off an item
-            let item = findItemOnTile(this.pos);
-            if (!this.inventory && item) {
-                // Ok, the item is right here, so let's pick it up
-                // and take it to a random place
-                itemPickUp(this, item);
-                dest = randomDestination();
-            } else if (!this.inventory) {
-                // No item here, and we're carrying nothing,
-                // so let's go pick up an item
-                dest = map.items[0].pos; // assume it's on the ground
-            } else if (item) {
-                // We are carrying the item, but can't
-                // drop it here, so find a place to drop
-                dest = randomDestination();
-            } else {
-                // We already are carrying the item, and
-                // we can drop it here
-                itemDrop(this, this.inventory);
-                dest = randomDestination();
-            }
-
-            let bfs = breadthFirstSearch(map, this.pos, dest);
-            if (!bfs) {
-                console.warn("WARN bfs no path", this.pos.toString(), "to", dest.toString())
-                return;
-            }
-            let current = dest;
-            while (!current.equals(this.pos)) {
-                this.path.push(current)
-                current = bfs.came_from[current];
+            let job = jobs.lookupColonist(this);
+            if (job && job.type === 'transport') {
+                if (this.inventory) {
+                    // We have the item
+                    if (!this.pos.equals(job.dest)) throw "Should be at dest by now";
+                    itemDrop(this, this.inventory);
+                    jobs.deleteJob(job);
+                } else if (this.pos.equals(job.item.pos)) {
+                    // We are at the item
+                    itemPickUp(this, job.item);
+                    this.path = findPath(map, this.pos, job.dest);
+                } else {
+                    // We need to go to the item
+                    this.path = findPath(map, this.pos, job.item.pos);
+                }
             }
         }
     }
@@ -230,12 +213,18 @@ const simulation = { // global
                 this.colonists.push(new Colonist(Pos(x, y)));
             }
         }
-        // HACK: pickup/dropoff test with one colonist and one item
-        this.colonists.splice(1);
+        // HACK: transport job test with two items
+        // Currently there's no way to create an item on the
+        // ground so we create one in inventory and then drop it;
+        // eventually production jobs will be used to create items
         itemCreate('rawfood', this.colonists[0]);
+        itemDrop(this.colonists[0], this.colonists[0].inventory);
+        itemCreate('rawfood', this.colonists[1]);
+        itemDrop(this.colonists[1], this.colonists[1].inventory);
     },
     simulate() {
         this.tickId++;
+        jobs.simulate();
         for (let colonist of this.colonists) {
             colonist.simulate();
         }
@@ -262,6 +251,16 @@ function findItemOnTile(pos) {
         if (isItemPosOnGround(item.pos) && pos.equals(item.pos)) return item;
     }
     return null;
+}
+
+/**
+ * @param {ItemType} type
+ * @returns {Array<Item>}
+ */
+function findItemsOfType(type) {
+    return map.items.filter((item) => item.type === type);
+    // NOTE: could be faster if we have items per room, and then we only have
+    // to search some rooms
 }
 
 /**
@@ -388,6 +387,115 @@ function breadthFirstSearch(map, start, goal) {
     }
     throw "Path not found - should never happen";
 }
+
+function findPath(map, start, goal) {
+    let bfs = breadthFirstSearch(map, start, goal);
+    if (!bfs) {
+        console.warn("WARN bfs no path", start.toString(), "to", goal.toString())
+        return;
+    }
+    let path = [];
+    let current = goal;
+    while (!current.equals(start)) {
+        path.push(current)
+        current = bfs.came_from[current];
+    }
+    return path;
+}
+
+
+//////////////////////////////////////////////////////////////////////
+// Jobs
+
+const jobs = {
+    _id: 0,
+
+    /** @type{Job[]} */
+    table: [],
+
+    _lookup(field, value) {
+        return this.table.find((row) => row[field] === value);
+    },
+
+    /** @param{Position} dest */
+    lookupDest(dest) {
+        return this.table.find((row) => row.dest.equals(dest));
+    },
+
+    /** @param{Item} item */
+    lookupItem(item) {
+        return this._lookup('item', item);
+    },
+
+    /** @param{Colonist} colonist */
+    lookupColonist(colonist) {
+        return this._lookup('colonist', colonist);
+    },
+
+    addTransportJob(room, furniture, colonist, item, dest) {
+        this.table.push({
+            id: ++this._id, type: 'transport', room, furniture, colonist, item, dest
+        });
+        if (colonist.path.length) throw "Free colonist should not have a path";
+        // Colonist path will be assigned in colonist simulation
+    },
+
+    /** @param{Job} job */
+    deleteJob(job) {
+        job.type = "#deleted#";
+        let index = this.table.indexOf(job);
+        if (index < 0) throw "Deleting job not in table";
+        this.table.splice(index, 1);
+    },
+
+    candidates: [], // For debugging
+    simulate() {
+        // Find all furniture input positions; we never want to pick up these items
+        let furnitureInputPositions = new Set();
+        for (let room of map.rooms) {
+            for (let furniture of room.furniture) {
+                for (let input of roomCharacteristics[room.type].furnitureShape.inputs) {
+                    let dest = Pos(furniture.x + input.pos.x,
+                                   furniture.y + input.pos.y);
+                    furnitureInputPositions.add(dest.toString());
+                }
+            }
+        }
+
+        // Scan the world to find candidate jobs
+        this.candidates = [];
+        for (let room of map.rooms) {
+            for (let furniture of room.furniture) {
+                // TODO: determine if all inputs are filled (production job candidate)
+                // or if any is unfilled (transport job candidate)
+                for (let input of roomCharacteristics[room.type].furnitureShape.inputs) {
+                    let dest = Pos(furniture.x + input.pos.x,
+                                   furniture.y + input.pos.y);
+                    if (findItemOnTile(dest)) continue; // TODO: this will move out of the loop
+
+                    let job = this.lookupDest(dest);
+                    if (job) {
+                        this.candidates.push({room, furniture, input, status: "Destination reserved"});
+                        continue;
+                    }
+                    let colonist = simulation.colonists.find((colonist) => !this.lookupColonist(colonist));
+                    if (!colonist) {
+                        this.candidates.push({room, furniture, input, status: "No colonist available"});
+                        continue;
+                    }
+                    let items = findItemsOfType(input.type)
+                        .filter((item) => !this.lookupItem(item))
+                        .filter((item) => !furnitureInputPositions.has(item.pos.toString()));
+                    if (!items.length) {
+                        this.candidates.push({room, furniture, input, status: "No items available"});
+                        continue;
+                    }
+                    this.addTransportJob(room, furniture, colonist, items[0], dest)
+                }
+            }
+        }
+    },
+};
 
 
 //////////////////////////////////////////////////////////////////////
@@ -593,7 +701,7 @@ const render = {
                     }
                     for (let input of furnitureData.furnitureShape.inputs) {
                         this.drawTile(x + input.pos.x, y + input.pos.y,
-                                      input.type, "hsl(120 50% 50% / 0.3)");
+                                      input.type, "hsl(0 50% 50% / 0.1)");
                     }
                     for (let sprite of furnitureData.furnitureShape.sprites) {
                         this.drawTile(x + sprite.pos.x, y + sprite.pos.y,
@@ -675,6 +783,27 @@ const render = {
         ctx.restore();
     },
 
+    drawJobData() {
+        const debug = document.querySelector("#debug");
+        let html = `<table class="standard">
+              <thead><tr><td>Room<td>Input<td>Status</thead>
+              <tbody>`;
+        for (let record of jobs.candidates) {
+            let {room, furniture, input, status} = record;
+            html += `<tr><td>${room.type} @ ${furniture}</td><td>${input.type}</td><td>${status}</td></tr>`;
+        }
+        html += `</tbody></table>`;
+
+        html += `<table class="standard">
+           <thead><tr><td>Job<td>Room<td>Item<td>Colonist<td>Dest</tr></thead>
+           <tbody>`;
+        for (let job of jobs.table) {
+            let {id, type, room, furniture, colonist, item, dest} = job;
+            html += `<tr><td>${id}:${type}<td>${room.type}<td>${item.type} @ ${item.pos}<td>${colonist.id}<td>${dest}</tr>`;
+        }
+        debug.innerHTML = html;
+    },
+
     all() {
         this.begin();
 
@@ -686,6 +815,8 @@ const render = {
         this.drawItems('ground');
         this.drawCreatures();
         this.drawItems('inventory');
+
+        this.drawJobData();
 
         this.end();
     },
