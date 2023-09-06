@@ -122,7 +122,7 @@ function positionInRoom(room, pos) {
  */
 function roomAtPosition(pos) {
     let roomOrDoor = map.walkable.get(pos.toString())?.in;
-    return 'type' in roomOrDoor ? roomOrDoor : undefined;
+    return (roomOrDoor && 'type' in roomOrDoor) ? roomOrDoor : undefined;
 }
 
 /**
@@ -167,7 +167,8 @@ function isPositionInRoomBuildable(room, pos) {
             if (pos.equals(p)) return false;
         }
     }
-    // If we didn't find anything bad, we're good
+    if (jobs.lookupDest(pos)) return false;
+    if (findItemOnTile(pos)) return false;
     return true;
 }
 
@@ -309,12 +310,21 @@ function findItemOnTile(pos) {
  * @returns {Position | null}
  */
 function findOpenOutputTile(room) {
+    /** @type{Set<string>} */
+    let occupiedByFurniture = new Set();
+    for (let f of room.furniture) {
+        for (let p of positionsOccupiedByFurniture(room, f).keys()) {
+            occupiedByFurniture.add(p);
+        }
+    }
+    
     // Prefer right side, bottom if available
     for (let x = room.rect.right-1; x > room.rect.left; x--) {
         for (let y = room.rect.bottom-1; y > room.rect.top; y--) {
             let pos = Pos(x, y);
             if (findItemOnTile(pos)) continue;
             if (jobs.lookupDest(pos)) continue;
+            if (occupiedByFurniture.has(pos.toString())) continue;
             return pos;
         }
     }
@@ -947,7 +957,6 @@ const main = {
         f: null,
     },
     // last known position of the pointer, in world coordinates
-    // TODO: convert the whole program to use sx, sy for screen (canvas) and wx, wy for world
     pointerState: Pos(0, 0),
 
     init() {
