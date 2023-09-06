@@ -21,7 +21,6 @@ export default {
     wheat:        await S("lorc/wheat"),
     rawfood:      await S("delapouite/grain-bundle"),
     wall:         await S("delapouite/stone-wall"),
-    cactus:       await S("delapouite/cactus"),
     door:         await S("delapouite/door"),
     move:         await S("delapouite/move"),
     square:       await S("delapouite/square"),

@@ -39,29 +39,43 @@ const roomCharacteristics = {
     // map the room type to things we need to know about how the room works
     wilderness: {
         color: "hsl(100 30% 60%)",
-        furnitureShape: {
-            name: "berries",
-            ticks: 1,
-            stand: Pos(0, 0),
-            inputs: [],
-            output: 'rawfood',
-            sprites: [{type: 'cactus', pos: Pos(0, 0)}],
-        },
+        // Unfortunately the way the simulation currently works doesn't
+        // support wilderness furniture (e.g. wild plants and trees)
     },
     open: {
         color: "hsl(0 0% 40%)",
         furnitureShape: null,
     },
+    farm: {
+        furnitureShape: {
+            name: "field",
+            ticks: 30,
+            stand: Pos(0, 0),
+            inputs: [],
+            output: 'rawfood',
+            sprites: [{type: 'wheat', pos: Pos(0, 0)}],
+        },
+      },
     dining: {
         furnitureShape: {
             name: "table",
             ticks: 20,
             stand: Pos(0, 1),
-            inputs: [{type: 'rawfood', pos: Pos(0, 0)}],
+            inputs: [{type: 'meal', pos: Pos(0, 0)}],
             output: null,
             sprites: [{type: 'table', pos: Pos(0, 0)}],
         },
         // TODO: needs to reduce hunger
+    },
+    kitchen: {
+        furnitureShape: {
+            name: "stove",
+            ticks: 20,
+            stand: Pos(0, 1),
+            inputs: [{type: 'rawfood', pos: Pos(0, 0)}],
+            output: 'meal',
+            sprites: [{type: 'cooking_pot', pos: Pos(0, 0)}],
+        },
     },
     bedroom: {
         furnitureShape: {
@@ -108,7 +122,7 @@ function positionInRoom(room, pos) {
  */
 function roomAtPosition(pos) {
     let roomOrDoor = map.walkable.get(pos.toString())?.in;
-    return roomOrDoor?.type ? roomOrDoor : undefined;
+    return 'type' in roomOrDoor ? roomOrDoor : undefined;
 }
 
 /**
@@ -162,8 +176,8 @@ class Colonist {
     static _id = 0;
 
     constructor(pos) {
-        /** @type {number} */
-        this.id = ++Colonist._id;
+        /** @type {string} */
+        this.id = "c" + (++Colonist._id);
         /** @type {Position} */
         this.pos = pos;
         /** @type {Position[]} - reverse order of tiles to visit */
@@ -174,61 +188,96 @@ class Colonist {
     }
 
     simulate() {
-        function randomDestination() {
-            const numberOfDestinations = map.walkable.size;
-            let i = Math.floor(Math.random() * numberOfDestinations);
-            return Array.from(map.walkable.values())[i].pos;
-        }
+        // NOTE: this is a state machine but the state is stored implicitly,
+        // and the logic here is error prone. I've had more tricky bugs
+        // here than elsewhere in the code, and I should've structured it
+        // differently, maybe with an explicit state machine.
 
         if (this.path.length > 0) {
             // If there's a path, we'll move one step closer to the goal
             this.pos = this.path.pop();
-        } else {
-            let job = jobs.lookupColonist(this);
-            if (job && job.type === 'transport') {
-                if (this.inventory) {
-                    // We have the item
-                    if (!this.pos.equals(job.dest)) throw "Should be at dest by now";
-                    itemDrop(this, this.inventory);
-                    jobs.deleteJob(job);
-                } else if (this.pos.equals(job.item.pos)) {
-                    // We are at the item
-                    itemPickUp(this, job.item);
-                    this.path = findPath(map, this.pos, job.dest);
-                } else {
-                    // We need to go to the item
-                    this.path = findPath(map, this.pos, job.item.pos);
+            return;
+        }
+
+        let job = jobs.lookupColonist(this);
+        if (!job) {
+            return;
+        }
+
+        if (job.type === 'transport') {
+            if (this.inventory) {
+                // We have the item, need to drop it
+                if (!this.pos.equals(job.dest)) throw "¹Should be at dest by now";
+                itemDrop(this, this.inventory);
+                jobs.deleteJob(job);
+            } else if (!isItemPosOnGround(job.item.pos)) {
+                throw `Job ${job.id}: colonist ${job.colonist.id}, item ${job.item.id} should be on ground but is at ${job.item.pos.id}`;
+            } else if (this.pos.equals(job.item.pos)) {
+                // We are at the item, need to pick it up
+                itemPickUp(this, job.item);
+                this.path = findPath(map, this.pos, job.dest);
+            } else {
+                // Need to go to the item
+                this.path = findPath(map, this.pos, job.item.pos);
+            }
+        } else if (job.type === 'production') {
+            const {furnitureShape} = roomCharacteristics[job.room.type];
+            if (this.inventory) {
+                // We have the item, need to drop it
+                if (!this.pos.equals(job.dest)) throw "²Should be at dest by now";
+                itemDrop(this, this.inventory);
+                jobs.deleteJob(job);
+            } else if (!this.pos.equals(job.stand)) {
+                // Need to walk to the furniture
+                this.path = findPath(map, this.pos, job.stand);
+            } else if (!job.timeCompleted) {
+                // Need to start the production
+                job.timeCompleted = simulation.tickId + furnitureShape.ticks;
+            } else if (simulation.tickId >= job.timeCompleted) {
+                // Production is finished, need to take the output
+                job.timeCompleted = null;
+                for (let input of furnitureShape.inputs) {
+                    let item = findItemOnTile(
+                        Pos(job.furniture.x + input.pos.x,
+                            job.furniture.y + input.pos.y));
+                    itemDestroy(item);
                 }
+                if (furnitureShape.output) {
+                    // Create the output item, and associate it with
+                    // the job so nobody else tries to use it yet.
+                    if (job.item) throw "Production job shouldn't already have an item";
+                    job.item = itemCreate(furnitureShape.output, job.colonist);
+                } else {
+                    jobs.deleteJob(job);
+                    // The colonist will still walk somewhere so they don't
+                    // block this job, but the job itself is done so the
+                    // furniture can be used by someone else
+                }
+                this.path = findPath(map, this.pos, job.dest);
+            } else {
+                // Waiting to do the job
             }
         }
     }
 }
 
 const simulation = { // global
-    TICKS_PER_SECOND: 10,
+    TICKS_PER_SECOND: 100,
     tickId: 1, // start from 1 because I also use this as a truthy value
     colonists: [],
     init() {
         for (let x = 20; x < 25; x++) {
-            for (let y = 10; y < 15; y++) {
+            for (let y = 10; y < 11; y++) {
                 this.colonists.push(new Colonist(Pos(x, y)));
             }
         }
-        // HACK: transport job test with two items
-        // Currently there's no way to create an item on the
-        // ground so we create one in inventory and then drop it;
-        // eventually production jobs will be used to create items
-        itemCreate('rawfood', this.colonists[0]);
-        itemDrop(this.colonists[0], this.colonists[0].inventory);
-        itemCreate('rawfood', this.colonists[1]);
-        itemDrop(this.colonists[1], this.colonists[1].inventory);
     },
     simulate() {
         this.tickId++;
-        jobs.simulate();
         for (let colonist of this.colonists) {
             colonist.simulate();
         }
+        jobs.simulate();
     },
 };
 
@@ -255,6 +304,25 @@ function findItemOnTile(pos) {
 }
 
 /**
+ * Find a tile without items or a job assigned to it
+ * @param {Room} room
+ * @returns {Position | null}
+ */
+function findOpenOutputTile(room) {
+    // Prefer right side, bottom if available
+    for (let x = room.rect.right-1; x > room.rect.left; x--) {
+        for (let y = room.rect.bottom-1; y > room.rect.top; y--) {
+            let pos = Pos(x, y);
+            if (findItemOnTile(pos)) continue;
+            if (jobs.lookupDest(pos)) continue;
+            return pos;
+        }
+    }
+    return null;
+}
+
+
+/**
  * @param {ItemType} type
  * @returns {Array<Item>}
  */
@@ -269,9 +337,10 @@ function findItemsOfType(type) {
  * @param {Colonist} colonist
  * @returns {Item}
  */
+let _nextItemId = 0;
 function itemCreate(type, colonist) {
     if (colonist.inventory !== null) throw `Can't create item ${type}, colonist inventory not empty`;
-    let item = {type, pos: colonist};
+    let item = {id: "i" + (++_nextItemId), type, pos: colonist};
     map.items.push(item);
     colonist.inventory = item;
     return item;
@@ -320,6 +389,8 @@ for (let room of map.rooms) { // HACK: for testing
     if (room.q < 2) unlockRoom(map, room);
 }
 map.rooms[0].furniture = [Pos(map.rooms[0].rect.left + 2, map.rooms[0].rect.top + 1)];
+map.rooms[5].furniture = [Pos(map.rooms[5].rect.left + 2, map.rooms[5].rect.top + 1)];
+map.rooms[10].furniture = [Pos(map.rooms[10].rect.left + 2, map.rooms[10].rect.top + 1)];
 
 const camera = { // global
     pos: Pos(NaN, NaN),
@@ -386,7 +457,7 @@ function breadthFirstSearch(map, start, goal) {
             }
         }
     }
-    throw "Path not found - should never happen";
+    throw `Path not found from ${start} to ${goal} - should never happen`;
 }
 
 function findPath(map, start, goal) {
@@ -420,7 +491,12 @@ const jobs = {
 
     /** @param{Position} dest */
     lookupDest(dest) {
-        return this.table.find((row) => row.dest.equals(dest));
+        return this.table.find((row) => dest.equals(row.dest));
+    },
+
+    /** @param{Position} stand */
+    lookupStand(stand) {
+        return this.table.find((row) => row.stand && stand.equals(row.stand));
     },
 
     /** @param{Item} item */
@@ -434,11 +510,26 @@ const jobs = {
     },
 
     addTransportJob(room, furniture, colonist, item, dest) {
+        // NOTE: although in general, a colonist only has a path
+        // because they're on a job, a production job with no output
+        // will have the colonist walk away even after the job is
+        // complete. In that case, we have a non-empty path here and
+        // need to abandon that path.
+        colonist.path = [];
         this.table.push({
-            id: ++this._id, type: 'transport', room, furniture, colonist, item, dest
+            id: "j" + (++this._id), type: 'transport',
+            room, furniture, colonist, item, dest,
+            stand: undefined, timeCompleted: undefined,
         });
-        if (colonist.path.length) throw "Free colonist should not have a path";
-        // Colonist path will be assigned in colonist simulation
+    },
+
+    addProductionJob(room, furniture, colonist, stand, dest) {
+        colonist.path = []; // NOTE: see addTransportJob
+        this.table.push({
+            id: "j" + (++this._id), type: 'production',
+            room, furniture, colonist, stand, dest,
+            item: undefined, timeCompleted: null
+        });
     },
 
     /** @param{Job} job */
@@ -463,35 +554,63 @@ const jobs = {
             }
         }
 
-        // Scan the world to find candidate jobs
+        // Scan the entire world to find candidate jobs
         this.candidates = [];
         for (let room of map.rooms) {
             for (let furniture of room.furniture) {
-                // TODO: determine if all inputs are filled (production job candidate)
+                // Determine if all inputs are filled (production job candidate)
                 // or if any is unfilled (transport job candidate)
-                for (let input of roomCharacteristics[room.type].furnitureShape.inputs) {
-                    let dest = Pos(furniture.x + input.pos.x,
-                                   furniture.y + input.pos.y);
-                    if (findItemOnTile(dest)) continue; // TODO: this will move out of the loop
+                const {furnitureShape} = roomCharacteristics[room.type];
+                let inputs = furnitureShape.inputs;
+                let inputPositions = inputs.map((input) =>
+                    Pos(furniture.x + input.pos.x, furniture.y + input.pos.y));
+                let inputItems = inputPositions.map(findItemOnTile);
 
-                    let job = this.lookupDest(dest);
-                    if (job) {
-                        this.candidates.push({room, furniture, input, status: "Destination reserved"});
+                if (inputItems.every((item) => item)) {
+                    // This furniture is ready for a production job
+                    let stand = Pos(furniture.x + furnitureShape.stand.x,
+                                    furniture.y + furnitureShape.stand.y);
+                    if (this.lookupStand(stand)) {
+                        this.candidates.push({room, furniture, status: "Furniture in use"});
                         continue;
                     }
                     let colonist = simulation.colonists.find((colonist) => !this.lookupColonist(colonist));
                     if (!colonist) {
-                        this.candidates.push({room, furniture, input, status: "No colonist available"});
+                        this.candidates.push({room, furniture, status: "No colonist available"});
                         continue;
                     }
-                    let items = findItemsOfType(input.type)
-                        .filter((item) => !this.lookupItem(item))
-                        .filter((item) => !furnitureInputPositions.has(item.pos.toString()));
-                    if (!items.length) {
-                        this.candidates.push({room, furniture, input, status: "No items available"});
+                    let dest = findOpenOutputTile(room);
+                    if (!dest) {
+                        this.candidates.push({room, furniture, status: "No output tile available"});
                         continue;
                     }
-                    this.addTransportJob(room, furniture, colonist, items[0], dest)
+                    this.addProductionJob(room, furniture, colonist, stand, dest);
+                } else {
+                    // This furniture is ready for a tranport job for each input
+                    for (let i = 0; i < inputs.length; i++) {
+                        const input = inputs[i];
+                        const dest = inputPositions[i];
+                        if (inputItems[i]) continue; // already fulfilled, no job
+
+                        let job = this.lookupDest(dest);
+                        if (job) {
+                            this.candidates.push({room, furniture, input, status: "Destination reserved"});
+                            continue;
+                        }
+                        let colonist = simulation.colonists.find((colonist) => !this.lookupColonist(colonist));
+                        if (!colonist) {
+                            this.candidates.push({room, furniture, input, status: "No colonist available"});
+                            continue;
+                        }
+                        let items = findItemsOfType(input.type)
+                            .filter((item) => !this.lookupItem(item))
+                            .filter((item) => !furnitureInputPositions.has(item.pos.toString()));
+                        if (!items.length) {
+                            this.candidates.push({room, furniture, input, status: "No items available"});
+                            continue;
+                        }
+                        this.addTransportJob(room, furniture, colonist, items[0], dest)
+                    }
                 }
             }
         }
@@ -746,24 +865,55 @@ const render = {
         ctx.restore();
     },
 
-    drawJobData() {
+    drawDebugData() {
         const debug = document.querySelector("#debug");
-        let html = `<table class="standard">
-              <thead><tr><td>Room<td>Input<td>Status</thead>
-              <tbody>`;
-        for (let record of jobs.candidates) {
-            let {room, furniture, input, status} = record;
-            html += `<tr><td>${room.type} @ ${furniture}</td><td>${input.type}</td><td>${status}</td></tr>`;
-        }
-        html += `</tbody></table>`;
 
-        html += `<table class="standard">
-           <thead><tr><td>Job<td>Room<td>Item<td>Colonist<td>Dest</tr></thead>
-           <tbody>`;
-        for (let job of jobs.table) {
-            let {id, type, room, furniture, colonist, item, dest} = job;
-            html += `<tr><td>${id}:${type}<td>${room.type}<td>${item.type} @ ${item.pos}<td>${colonist.id}<td>${dest}</tr>`;
+        function tableHtml(name, fields, rows) {
+            let html = ``;
+            html += `<table class="standard w-full" style="margin-bottom:1em">
+              <thead>
+                <tr><th colspan=${fields.length}>${name}</tr>
+                <tr>${fields.map((f) => '<td>'+f).join("")}
+              </thead>
+              <tbody>`;
+            for (let row of rows) {
+                html += `<tr>${row.map((d) =>  '<td>'+d).join("")}`;
+            }
+            html += `</tbody></table>`;
+            return html;
         }
+
+        function itemPos(item) {
+            if (!item) return "-";
+            return isItemPosOnGround(item.pos) ? item.pos : "🫳 " + item.pos.id;
+        }
+        function itemStr(item) {
+            if (!item) return "-";
+            return `${item.id}:${item.type}`;
+        }
+
+        let html = ``;
+        html += tableHtml("Jobs", ["Job", "Room", "Item", "Colonist", "Time", "Dest"],
+                      jobs.table.map(({id, type, room, colonist, item, timeCompleted, dest}) => [
+                          `${id}:${type}`,
+                          room.type,
+                          itemStr(item) + " @ " + itemPos(item),
+                          colonist.id,
+                          timeCompleted === undefined? "-" : timeCompleted === null? "waiting" : (timeCompleted - simulation.tickId),
+                          dest,
+                      ]));
+        html += tableHtml("Job unfulfilled", ["Room", "Input", "Status"],
+                      jobs.candidates.map(({room, furniture, input, status}) =>
+                          [`${room.type} @ ${furniture}`, input?.type ?? '', status]));
+        html += tableHtml("Items", ["Id", "Type", "Pos"],
+                          map.items.map((item) => [item.id, item.type, itemPos(item)]));
+        html += tableHtml("Colonists", ["Colonist", "Pos", "Job", "Holding", "Dest"],
+                          simulation.colonists.map((colonist) => [
+                              colonist.id, colonist.pos,
+                              jobs.lookupColonist(colonist)?.id ?? '',
+                              itemStr(colonist.inventory),
+                              colonist.path?.[colonist.path?.length-1] ?? '',
+                          ]));
         debug.innerHTML = html;
     },
 
@@ -779,7 +929,7 @@ const render = {
         this.drawCreatures();
         this.drawItems('inventory');
 
-        this.drawJobData();
+        this.drawDebugData();
 
         this.end();
     },

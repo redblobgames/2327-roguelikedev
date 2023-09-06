@@ -1,10 +1,10 @@
-type Colonist;
+type Colonist = any;
 
 type Position = {x: number; y: number; toString(): string; equals(p: Position): boolean;};
 type Rect = {left: number; right: number; top: number; bottom: number;};
 
 type ItemType = 'rawfood' | 'cookedfood';
-type Item = {type: ItemType; pos: Position | Object;};
+type Item = {id: string; type: ItemType; pos: Position | Object;};
 
 type FurnitureShape = {
     stand: Position;
@@ -15,7 +15,7 @@ type FurnitureShape = {
 };
                   
 type Door = {pos: Position; room1: Room; room2: Room;};
-type RoomType = 'open' | 'wilderness' | 'dining' | 'bedroom';
+type RoomType = 'open' | 'wilderness' | 'dining' | 'bedroom' | 'kitchen' | 'farm';
 type Room = {
     type: RoomType;
     q: number; r: number;
@@ -37,11 +37,13 @@ type GameMap = {
 };
 
 type Job = {
-    id: number;
+    id: string;
     type: string;
     room: Room;
     furniture: Position;
     colonist: Colonist;
-    item: Item;
-    dest: Position?;
+    item: Item | undefined;
+    dest: Position;
+    stand: Position | undefined;
+    timeCompleted: number | null | undefined;
 };
