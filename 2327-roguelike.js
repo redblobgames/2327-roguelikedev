@@ -116,11 +116,11 @@ function positionInRoom(room, pos) {
 }
 
 /**
- * Is there a room at a given position?
+ * Is there an already-unlocked room at a given position?
  * @param {Position} pos
  * @returns {Room?}
  */
-function roomAtPosition(pos) {
+function unlockedRoomAtPosition(pos) {
     let roomOrDoor = map.walkable.get(pos.toString())?.in;
     return (roomOrDoor && 'type' in roomOrDoor) ? roomOrDoor : undefined;
 }
@@ -811,7 +811,7 @@ const render = {
      */
     drawFurnitureCandidateAt(pos) {
         pos = Pos(Math.floor(pos.x), Math.floor(pos.y));
-        let room = roomAtPosition(pos);
+        let room = unlockedRoomAtPosition(pos);
         if (!room || !room.unlocked) return;
         let positions = positionsOccupiedByFurniture(room, pos).values();
         ctx.save();
@@ -1031,17 +1031,19 @@ const main = {
         if (event.button !== 0) return; // left button only
         let pos = camera.convertCanvasToWorldCoord(convertPixelToCanvasCoord(event));
         // Unlock the room if it's locked
-        let room = roomAtPosition(pos);
-        if (room && unlockableRoomList(map).indexOf(room) >= 0) {
-            unlockRoom(map, room);
-            this.render();
-        } // TODO: else show error message?
+        let room = unlockableRoomList(map).find((room) => positionInRoom(room, this.pointerState));
+        if (!room) {
+            console.log("Ignored - click on room, no room found");
+            return;
+        }
+        unlockRoom(map, room);
+        this.render();
     },
 
     furniture_onClick(event) {
         if (event.button !== 0) return; // left button only
         let pos = camera.convertCanvasToWorldCoord(convertPixelToCanvasCoord(event));
-        let room = roomAtPosition(pos);
+        let room = unlockedRoomAtPosition(pos);
         if (!room) return; // either invalid pos, or no room; TODO: show error message?
         let positions = positionsOccupiedByFurniture(room, pos).values();
         for (let p of positions) if (!isPositionInRoomBuildable(room, p)) return; // TODO: error message?
@@ -1104,13 +1106,13 @@ const main = {
             setMessage(`R to unlock rooms, F to place furniture, or drag the mouse to scroll`);
             break;
         case 'room':
-            render.highlightedRoom = roomAtPosition(this.pointerState);
-            render.cursor = unlockableRoomList(map).indexOf(render.highlightedRoom) >= 0 ? 'pointer' : 'cell';
+            render.highlightedRoom = unlockableRoomList(map).find((room) => positionInRoom(room, this.pointerState));
+            render.cursor = render.highlightedRoom? 'pointer' : '';
             this.render();
             setMessage("Click to unlock a room");
             break;
         case 'furniture':
-            let room = roomAtPosition(this.pointerState);
+            let room = unlockedRoomAtPosition(this.pointerState);
             render.cursor = room?.unlocked ? 'crosshair' : 'no-drop';
             this.render();
             let shape = roomCharacteristics[room?.type]?.furnitureShape;
