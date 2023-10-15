@@ -3,7 +3,7 @@
 #+property: header-args:dot    :cache yes
 #+options: toc:nil
 
-Each summer r/roguelikedev has a [[https://old.reddit.com/r/roguelikedev/wiki/python_tutorial_series][summer event]] in which we all make a simple roguelike, roughly following the libtcod roguelike tutorial. [[href:/x/2226-roguelike-dev/][Last year I tried to clone Dwarf Fortress]] in 40 hours. That was too ambitious. But I did enjoy working on a "fortress mode" project more than an "adventure mode" project, so I'd like to do something like that this year, but with a smaller scope.
+Each summer the [[https://old.reddit.com/r/roguelikedev/][r/roguelikedev]] community has a [[https://old.reddit.com/r/roguelikedev/wiki/python_tutorial_series][summer event]] in which we all make a simple roguelike, roughly following the [[https://rogueliketutorials.com/][Python libtcod roguelike tutorial]]. Last year [[href:/x/2226-roguelike-dev/][I tried to clone Dwarf Fortress]] in 40 hours. That was too ambitious. But I did enjoy working on a "fortress mode" project more than an "adventure mode" project, so I'd like to do something like that this year, but with a smaller scope. @@html:<strong class="hide-for-mouse">Requires keyboard+mouse.</strong>@@
 
 #+include: "game.html" export html
 
@@ -11,9 +11,11 @@ Icons from [[https://game-icons.net][game-icons.net]], CC BY 3.0. Code repositor
 
 #+TOC: headlines 2
 
-Unlike a typical "fortress mode" game, I want to have an end to the game. This is inspired by Against the Storm, which lets you build a town but then you win or lose, and you start another town. But I don't really know how to do this right now, so I'm going to go ahead and implement parts of the game and hope to figure it out later.
+Unlike a typical "fortress mode" game, I wanted to have an end to the game. This was inspired by [[https://store.steampowered.com/app/1336490/Against_the_Storm/][Against the Storm]], which lets you build a town but then you win or lose, and you start another town. 
 
-The main idea right now is that the wilderness is all accessible at the beginning.  You can use natural resources at small scales. But to advance, you need to set up rooms to refine and process resources. Last year, building rooms and walls tile by tile is what doomed my project. This year, all the rooms will already exist in the dungeon. You'll claim and populate them.
+In my game the wilderness is all accessible at the beginning.  You can use natural resources at small scales. But to advance, you need to set up rooms to process resources. Last year, building rooms and walls tile by tile is what doomed my project. This year, I generated all the rooms procedurally. You'll claim and populate them to progress.
+
+Skip ahead to the [[Conclusion][conclusion]].
 
 * Setting up
 :PROPERTIES:
@@ -22,7 +24,7 @@ The main idea right now is that the wilderness is all accessible at the beginnin
 :CUSTOM_ID: setting-up
 :END:
 
-Since I'm participating in the Roguelikedev summer event, I'm going to /try/ to follow the same section numbers as the original Python tutorial, even though it's an "adventure mode" game and I'm not making a game like that.
+The r/roguelikedev summer event follows a Python tutorial for an "adventure mode" game. I'm going to adapt the tutorial topics for a "fortress mode" colony simulator game.
 
 Last year I said I feel like a JavaScript project is easier to set up than a Python project, and I continue to feel that way. I did use a build step last year, but it's not necessary to do that, and most of my projects don't use a build step. This year I'm going to start out without a build step, and only add one if I need to.
 
@@ -70,6 +72,8 @@ The second thing I wanted to do here was to /constrain/ the camera position to p
 The camera's position is restricted to a rectangle the size of the map, but shrunk by a /half view box/ at each corner. This will keep the view inside the map region. A little detail: I added a slight margin to this calculation so that you can go outside the map region just a tiny bit. This adds a visual border to show that you're at the edge of the map.
 
 For the other controls, I want to try making something trackpad friendly, requiring only the left button, but then using /keys/ to modify the mouse action. For example, instead of clicking through a menu to select "storage area" and then going into a "storage area marking mode", I might try “hold down ~S~ while dragging a rectangle". This wouldn't require navigating menus. The mode is activated while you hold down the key and the rectangle ends when you release the key. I don't know whether I'll like this until I try it.
+
+Spoiler: I liked it a lot, but holding down a key makes the cursor disappear on Firefox/Mac.
 
 * Entity, render, map
 :PROPERTIES:
@@ -192,7 +196,7 @@ I also want rooms to have labels. I think in a management game it's important to
 
 The room labels will be "Kitchen", "Dining", "Bedroom", etc. but I haven't implemented room types yet.
 
-Bug: I noticed that on Firefox/Mac, holding down a key causes the cursor to mostly disappear. Weird. This is not only on my site, but on any site.
+Bug: I noticed that on Firefox/Mac, holding down a key causes the cursor to mostly disappear. Weird. This is not only on my site, but on any site. It seems fine on Firefox/Linux and on Chrome.
 
 * Placing enemies (Part 5)
 :PROPERTIES:
@@ -227,18 +231,18 @@ I also considered simplifying further by having furniture be a single tile, with
 
 Possible room types and their object types:
 
-| room             | object         | inputs            | outputs     |
-|------------------+----------------+-------------------+-------------|
-| wilderness*      | berry          | -                 | food        |
-| wilderness*      | tree           | -                 | wood        |
-| underground farm | -              | -                 | crops       |
-| mushroom cavern  | -              | -                 | crops       |
-| kitchen          | cooking table  | raw food          | cooked food |
-| dining           | dining table   | cooked food       | -           |
-| bedroom          | bed            | -                 | -           |
-| iron mine        | mining pit     | -                 | iron        |
-| quarry           | mining pit     | -                 | stone       |
-| crafting         | crafting table | wood, stone, iron | crafts      |
+| room             | object         | inputs            | outputs |
+|------------------+----------------+-------------------+---------|
+| wilderness*      | berry          | -                 | food    |
+| wilderness*      | tree           | -                 | wood    |
+| underground farm | -              | -                 | crops   |
+| mushroom cavern  | -              | -                 | crops   |
+| kitchen          | cooking table  | raw food          | meal    |
+| dining           | dining table   | meal              | -       |
+| bedroom          | bed            | -                 | -       |
+| iron mine        | mining pit     | -                 | iron    |
+| quarry           | mining pit     | -                 | stone   |
+| crafting         | crafting table | wood, stone, iron | crafts  |
 
 I don't know what the "end game" of the production tree will be, but I think /crafts/ could be the cost of opening up later rooms.
 
@@ -283,6 +287,8 @@ To implement pathfinding, I need to quickly look up whether a tile is occupied, 
 1. I added =room.occupied= as type =Map<string, Furniture | Item | null>=.
 
 To determine what's on a tile, I'll first look up the room in the =walkable= map and then look in the =room.occupied= map. I don't know that this is the best choice. But I also realize that sometimes I spend too much time trying to pick the best choice, when all I really need is a reasonable choice.
+
+[Spoiler: I never did switch to Dijkstra's]
 
 * Combat (Part 6)
 :PROPERTIES:
@@ -353,7 +359,7 @@ digraph {
 #+results:
 [[file:build/furniture-state.png]]
 
-*This is going to be tricky to implement*.
+The colonist and item also have their own state transitions. *This is going to be tricky to implement*.
 
 ** Item transitions
 :PROPERTIES:
@@ -371,32 +377,30 @@ I need to figure out how to store items. An item can be on the floor or carried 
   - set =colonist.inventory= to =item=
 1. Item is consumed on the ground: 
   - ensure =item.pos= is on the ground
-  - set =occupied[item.pos]= to =null=
+  - set =occupied[item.pos]= to =null=¹
   - set =item.pos= to =null=
   - destroy =item= (remove from global =items= list)
 1. Colonist picks up item: 
   - ensure =item.pos= is equal to =colonist.pos=
   - ensure =colonist.inventory= is =null=
-  - set =occupied[item.pos]= to null
+  - set =occupied[item.pos]= to null¹
   - set =item.pos= to =colonist=
   - set =colonist.inventory= to =item=
 1. Colonist drops item: 
   - ensure =occupied[colonist.pos]= is =null=
   - ensure =item.pos= is =colonist=
-  - set =occupied[newpos]= to =item=
+  - set =occupied[newpos]= to =item=¹
   - set =item.pos= to =colonist.pos=
   - set =colonist.inventory= to =null=
 
 I like to write down these transitions before coding them. I want to make sure that related data structures are kept in sync.
 
-/TODO: I don't actually have an =occupied[]= map yet/, but instead I'm searching over all items.
+¹ I ended up not implementing an explicit =occupied[]= map. I realized that I need to get the basic game working first before worrying about efficiency, and the =occupied[]= map is there for efficiency only.
 
 ** Job candidates
 :PROPERTIES:
 :CUSTOM_ID: job-system-candidates
 :END:
-
-TODO: I've worked this out on paper but haven't implemented or tested it.
 
 If /any/ of the input requirements aren't met (=tile= is empty), then we'll create a *transport job* for each of them.
 
@@ -435,6 +439,8 @@ digraph {
     move -> work [label="2"];
     work -> deliver [label="3"];
     deliver -> done [label="4"];
+    work -> wander [label="5"];
+    wander -> done;
 }
 #+end_src
 
@@ -445,14 +451,16 @@ digraph {
   Some jobs may require a colonist to have some status (like =colonist.hungry=).
    Create a =ProductionJob=. Set =stand.job=, =colonist.job=, and =dest.job= to this job. Set the colonist to find a path to =stand=. Set the job phase to /move/.
 2. The colonist has reached the =stand= position, and should start working. Set =job.timeCompleted= to the current time plus =ticks=. Set the job phase to /work/.
-3. The current time is past =job.timeCompleted=. Destroy the input objects. Create an output object, and put it into =colonist.inventory=. Set the item's =.pos= to the colonist. Set the colonist to find a path to =dest=. Set =stand.job= to null (this frees up the furniture to start another job). Set the job phase to /deliver/.
+3. The current time is past =job.timeCompleted=. Destroy the input objects. If there's an output, create an output object, and put it into =colonist.inventory=. Set the item's =.pos= to the colonist. Set the colonist to find a path to =dest=. Set =stand.job= to null (this frees up the furniture to start another job). Set the job phase to /deliver/.
 4. The colonist has reached the delivery point, and should drop the item. Set =item.pos= to =dest=. Set =colonist.inventory= to null. Set =colonist.job= and =dest.job= to null. If the job required the colonist to have some status, clear that status. Set the job phase to /done/. Remove the job from the jobs list.
+5. If there is no output for this job, wander randomly so that the colonist is not standing in the way of another job.
 
 Again, there's a lot of complexity here, and it's setting off my "error prone! error prone!" alarm bells.
 
 There are some invariants I should write down, such as:
 
 - =colonist.inventory= can only be non-null while =colonist.job= is non-null
+- =colonist.path= can only be non-empty while =colonist.job= is non-null (update: this turns out not to be true!)
 
 ** Data structures & ECS
 :PROPERTIES:
@@ -496,7 +504,6 @@ digraph {
 [[file:build/data-objects.png]]
 
 
-
 In the [[https://en.wikipedia.org/wiki/Relational_model][Relational programming model]], we would store the connections /outside/ the objects, in a table:
 
 #+begin_src dot :file build/data-relations.png :exports results
@@ -526,6 +533,26 @@ Since my priority here is to reduce errors, I'm going to try using the Relationa
 
 *TL;DR Instead of maintaining /both/ ~x.y = y~ and ~y.x = x~ I will simplify by storing only one of them* and then doing a search to find the other direction.
 
+** Bugs
+:PROPERTIES:
+:CUSTOM_ID: job-bugs
+:END:
+
+I implemented the Transport and Production job system, and tested it with 
+
+- furniture with 0 inputs and 1 output
+- furniture with 1 input and 0 outputs
+- furniture with 1 input and 1 output
+
+I ran into several tricky bugs. I think the table data structure helped a lot, /but/ I still had bugs with the state transitions and with invariants.
+
+- colonists would pick up an item from an /input/ tile and move it to another input tile, endlessly; the fix was when searching for an item, don't pick up anything from an input tile
+- colonists would stand at furniture after doing a job if there's no output item, blocking other colonists from using it; the fix was to path to a random location
+- colonists with no job would have a path, which violated an invariant; this resulted from the previous fix; the fix was to drop that invariant
+- colonists would drop output items on furniture; the fix was when searching for a suitable location, skip furniture tiles and their input tiles too
+- while a colonist was moving to a tile to drop off an item, the player could build furniture there; the fix was to block building on items and also on tiles reserved for future items
+
+I probably should have made the state machine explicit. I represented the state implicitly, based on whether =path= and =inventory= and other fields were set. An explicit state machine would've been redundant, I thought. But redundancy is often useful for verifying assumptions and finding bugs.
 
 * Ranged scrolls and targeting (Part 9)
 :PROPERTIES:
@@ -564,15 +591,43 @@ As much as it might be fun to have gear for the colonists, I am going to skip th
 
 * Conclusion
 :PROPERTIES:
-:UNNUMBERED: t
 :CUSTOM_ID: conclusion
 :END:
 
--
+I made it much farther this year than last year. I kept the scope as small as I could while still having the core idea of colonists moving around and doing jobs.
 
 #+begin_export html
+<figure>
+  <img src="blog/8-final.png" alt="Screenshot" />
+  <figcaption>Colony simulation working</figcaption>
+</figure>
+#+end_export
+
+I like the interface I came up with. The ~R~ and ~F~ keys act as modifiers to change the data view and also change what clicks do.
+
+This was my first chance to use the offgrid algorithm for map generation, and it went very well. Offgrid is the /simplest/  thing to use for dungeon map generation!
+
+In my planning I had too much premature optimization. For example in the [[Entity, render, map][pathfinding]] section I planned to have a hierarchical pathfinder that precalculated room-to-room paths. That was complete overkill. I didn't even end up implementing A*. I also had planned to build spatial indices but didn't need them either.
+
+I'm *very happy* with how the furniture + job system worked out. I was able to find something that was simpler and worked better than my original plan. The data structure was nice, and I will blog about it. There were lots of bugs though and if I work on something like this again, I'd like to find a way to write the code in a less bug-prone way.
+
+Job assignment in general is tricky. Goblin Camp uses the O(N³) Munkres-Kuhn Algorithm. Factorio recently posted [[https://factorio.com/blog/post/fff-374][about issues with their robot job algorithm]] and what they're doing to improve them. I'm using a simple greedy algorithm here.
+
+Having all the data displayed on the page was useful for debugging. Also, assigning each object a unique id was useful for the debugging views. I should've put it there at the beginning. 
+
+The biggest thing missing is that *this isn't much of a game*. I have the core mechanics (colonists, jobs, furniture, room unlocking) implemented but there's no overall flow. There's no reason to unlock new rooms. There's no cost of unlocking rooms. There's no reason for colonists to eat or sleep. There's no reason for anything to happen.
+
+Despite not having built a full game, I'm happy with how the project went. I kept the scope down. I learned a lot. I have some ideas to use in future projects. And maybe next year I'll attempt to make this into a game.
+
+#+begin_export html
+<style>
+  @media (pointer: fine) {
+    .hide-for-mouse { display: none; }
+  }
+</style>
+
 <x:footer>
   Created 26 Jun 2023; &#160;
-  <!-- hhmts start -->Last modified: 17 Aug 2023<!-- hhmts end -->
+  <!-- hhmts start -->Last modified: 15 Oct 2023<!-- hhmts end -->
 </x:footer>
 #+end_export

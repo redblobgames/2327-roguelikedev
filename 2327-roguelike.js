@@ -169,6 +169,8 @@ function isPositionInRoomBuildable(room, pos) {
     }
     if (jobs.lookupDest(pos)) return false;
     if (findItemOnTile(pos)) return false;
+    // TODO: there needs to be a remaining open tile in the room!! otherwise
+    // there's no place to store anything, and the room fails
     return true;
 }
 
@@ -263,7 +265,7 @@ class Colonist {
 }
 
 const simulation = { // global
-    TICKS_PER_SECOND: 100,
+    TICKS_PER_SECOND: 10,
     tickId: 1, // start from 1 because I also use this as a truthy value
     colonists: [],
     init() {
@@ -317,7 +319,7 @@ function findOpenOutputTile(room) {
             occupiedByFurniture.add(p);
         }
     }
-    
+
     // Prefer right side, bottom if available
     for (let x = room.rect.right-1; x > room.rect.left; x--) {
         for (let y = room.rect.bottom-1; y > room.rect.top; y--) {
@@ -964,7 +966,7 @@ const main = {
         this.render();
         this.loop();
 
-        for (let event of ['Click', 'PointerDown', 'PointerUp', 'PointerCancel', 'PointerMove', 'Wheel', 'KeyDown', 'KeyUp', 'Blur']) {
+        for (let event of ['Click', 'PointerDown', 'PointerUp', 'PointerCancel', 'PointerMove', 'Wheel', 'KeyDown', 'KeyUp', 'Blur', 'TouchStart']) {
             let el = (event === 'KeyUp' || event === 'Blur')? window : canvas;
             el.addEventListener(event.toLowerCase(), (e) => {
                 // Try calling state_onEvent and also onEvent
@@ -984,6 +986,13 @@ const main = {
         if (this.keyState.r)                   return 'room';
         if (this.keyState.f)                   return 'furniture';
         return 'view';
+    },
+
+    onTouchStart(event) {
+        // This allows us to scroll the map on touch devices instead
+        // of scrolling the page. https://www.redblobgames.com/making-of/draggable/
+        event.preventDefault();
+        // NOTE: on iOS, I can't even focus on the <canvas> so the game won't start
     },
 
     onPointerMove(event) {
@@ -1034,6 +1043,10 @@ const main = {
         let room = unlockableRoomList(map).find((room) => positionInRoom(room, this.pointerState));
         if (!room) {
             console.log("Ignored - click on room, no room found");
+            return;
+        }
+        if (unlockableRoomList(map).indexOf(room) < 0) {
+            console.log("Ignored - click on room, room not unlockable");
             return;
         }
         unlockRoom(map, room);
