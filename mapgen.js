@@ -92,7 +92,10 @@ function generateRooms(bounds) {
             let type = 'dining';
             if (q >= 1) type = 'bedroom';
             if (q >= 1 && r >= 1) type = ['kitchen', 'bedroom', 'farm'][r % 3];
+            if (q === 0 && r === 0) type = 'dining';
             if (q === 0 && r === 1) type = 'farm';
+            if (q === 0 && r === 2) type = 'kitchen';
+            if (q === 0 && r === 3) type = 'bedroom';
             if (rect.right - rect.left < 5 || rect.bottom - rect.top < 3) type = 'open';
             let room = {
                 type,

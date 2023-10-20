@@ -554,6 +554,10 @@ I ran into several tricky bugs. I think the table data structure helped a lot, /
 
 I probably should have made the state machine explicit. I represented the state implicitly, based on whether =path= and =inventory= and other fields were set. An explicit state machine would've been redundant, I thought. But redundancy is often useful for verifying assumptions and finding bugs.
 
+I ran into a "design bug". There's no particular reason /not/ to sleep, so a colonist might sleep, then wake up and go to sleep again. To avoid this I assigned "status effects". A job could clear the colonist's status effect, so the colonist would only take the /sleep/ job if they have the =sleepy= status effect. Then once they're finished sleeping it clears the flag, and the colonist wouldn't immediately go back to sleep.
+
+I ran into another "design bug". The colonists are assigned any job that's available. But if they're sleepy they might just happen to be assigned a cooking job, and maybe they're assigned cooking jobs all night. I wanted to prioritize basic needs like sleeping and eating, so I added a priority value per job type. Eating is the highest, then sleeping, and only if the colonist doesn't have a job that satisfies those will they consider cooking, farming, etc.
+
 * Ranged scrolls and targeting (Part 9)
 :PROPERTIES:
 :CUSTOM_ID: ranged-scrolls-and-targeting
@@ -612,6 +616,8 @@ In my planning I had too much premature optimization. For example in the [[Entit
 I'm *very happy* with how the furniture + job system worked out. I was able to find something that was simpler and worked better than my original plan. The data structure was nice, and I will blog about it. There were lots of bugs though and if I work on something like this again, I'd like to find a way to write the code in a less bug-prone way.
 
 Job assignment in general is tricky. Goblin Camp uses the O(N³) Munkres-Kuhn Algorithm. Factorio recently posted [[https://factorio.com/blog/post/fff-374][about issues with their robot job algorithm]] and what they're doing to improve them. I'm using a simple greedy algorithm here.
+
+My job system works "forwards". Jobs for raw materials run, then trigger jobs for intermediate products, then trigger jobs for final products. A game like Transport Fever has a "backwards" job system. Jobs for final products run first, creating /demand/ for intermediate products. The jobs for intemediate products then run, creating demand for raw materials. It might be interesting to experiment with this.
 
 Having all the data displayed on the page was useful for debugging. Also, assigning each object a unique id was useful for the debugging views. I should've put it there at the beginning. 
 

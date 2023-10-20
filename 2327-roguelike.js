@@ -49,27 +49,18 @@ const roomCharacteristics = {
     farm: {
         furnitureShape: {
             name: "field",
-            ticks: 30,
+            priority: 10,
+            ticks: 30, // how long does the job take
             stand: Pos(0, 0),
             inputs: [],
             output: 'rawfood',
             sprites: [{type: 'wheat', pos: Pos(0, 0)}],
         },
     },
-    dining: {
-        furnitureShape: {
-            name: "table",
-            ticks: 20,
-            stand: Pos(0, 1),
-            inputs: [{type: 'meal', pos: Pos(0, 0)}],
-            output: null,
-            sprites: [{type: 'table', pos: Pos(0, 0)}],
-        },
-        // TODO: needs to reduce hunger
-    },
     kitchen: {
         furnitureShape: {
             name: "stove",
+            priority: 11, // cooking prioritized over farming
             ticks: 20,
             stand: Pos(0, 1),
             inputs: [{type: 'rawfood', pos: Pos(0, 0)}],
@@ -80,18 +71,32 @@ const roomCharacteristics = {
     bedroom: {
         furnitureShape: {
             name: "bed",
-            ticks: 60,
+            priority: 20, // basic needs are higher priority jobs, run first
+            ticks: 160, // 8 hours of sleep means 200 ticks from TICKS_PER_DAY
             stand: Pos(0, 0),
             inputs: [],
             output: null,
             sprites: [{type: 'bed', pos: Pos(0, 0)}],
+            status: 'sleepy',
         },
-        // TODO: needs to reduce sleepiness
+    },
+    dining: {
+        furnitureShape: {
+            name: "table",
+            priority: 21,
+            ticks: 20,
+            stand: Pos(0, 1),
+            inputs: [{type: 'meal', pos: Pos(0, 0)}],
+            output: null,
+            sprites: [{type: 'table', pos: Pos(0, 0)}],
+            status: 'hungry',
+        },
     },
     tool_shop: {
         // NOTE: test of multi-input production
         furnitureShape: {
             name: "crafting",
+            priority: 1,
             ticks: 60,
             stand: Pos(0, 1),
             inputs: [
@@ -185,7 +190,8 @@ class Colonist {
         this.pos = pos;
         /** @type {Position[]} - reverse order of tiles to visit */
         this.path = [];
-        // TODO: status like sleepiness, hunger - would go up over time
+        /** @type {{hungry: boolean, sleepy: boolean}} */
+        this.status = {hungry: false, sleepy: false};
         /** @type {Item | null} - can hold one item */
         this.inventory = null;
     }
@@ -245,6 +251,10 @@ class Colonist {
                             job.furniture.y + input.pos.y));
                     itemDestroy(item);
                 }
+                // Clear any status effect the furniture affects
+                if (furnitureShape.status) {
+                    this.status[furnitureShape.status] = false;
+                }
                 if (furnitureShape.output) {
                     // Create the output item, and associate it with
                     // the job so nobody else tries to use it yet.
@@ -268,7 +278,6 @@ const simulation = { // global
     TICKS_PER_SECOND: 10,
     TICKS_PER_DAY: 600,
     EVENT_TIMES_BY_HOUR: {
-        0: 'sleep',
         6: 'eat', 7: 'work',
         12: 'eat', 13: 'work',
         18: 'eat', 19: 'work',
@@ -291,7 +300,10 @@ const simulation = { // global
     },
     simulate() {
         this.tickId++;
+        let statusToSet = this.EVENT_TIMES_BY_HOUR[this.hour];
         for (let colonist of this.colonists) {
+            if (statusToSet === 'eat') colonist.status.hungry = true;
+            if (statusToSet === 'sleep') colonist.status.sleepy = true;
             colonist.simulate();
         }
         jobs.simulate();
@@ -411,9 +423,10 @@ function itemDrop(colonist, item) {
 
 /** @type{GameMap} */
 const map = generateMap(); // global
-for (let room of map.rooms) { // HACK: for testing
-    if (room.q < 2) unlockRoom(map, room);
+for (let room of map.rooms) { // have some rooms unlocked initially
+    if (room.q < 1) unlockRoom(map, room);
 }
+// Place some initial furniture; this assumes the sizes of the rooms though
 map.rooms[0].furniture = [Pos(map.rooms[0].rect.left + 2, map.rooms[0].rect.top + 1)];
 map.rooms[5].furniture = [Pos(map.rooms[5].rect.left + 2, map.rooms[5].rect.top + 1)];
 map.rooms[10].furniture = [Pos(map.rooms[10].rect.left + 2, map.rooms[10].rect.top + 1)];
@@ -582,7 +595,11 @@ const jobs = {
 
         // Scan the entire world to find candidate jobs
         this.candidates = [];
-        for (let room of map.rooms) {
+        let sortedRooms = [...map.rooms].sort((a, b) => {
+                const priority = (room) => roomCharacteristics[room.type]?.furnitureShape?.priority || 0;
+                return priority(b) - priority(a); // higher priority earlier
+        });
+        for (let room of sortedRooms) {
             for (let furniture of room.furniture) {
                 // Determine if all inputs are filled (production job candidate)
                 // or if any is unfilled (transport job candidate)
@@ -600,7 +617,11 @@ const jobs = {
                         this.candidates.push({room, furniture, status: "Furniture in use"});
                         continue;
                     }
-                    let colonist = simulation.colonists.find((colonist) => !this.lookupColonist(colonist));
+                    let colonist = simulation.colonists.find((colonist) => {
+                        if (this.lookupColonist(colonist)) return false; // already busy
+                        if (furnitureShape.status && !colonist.status[furnitureShape.status]) return false; // doesn't have the needed status
+                        return true;
+                    });
                     if (!colonist) {
                         this.candidates.push({room, furniture, status: "No colonist available"});
                         continue;
@@ -656,11 +677,12 @@ function renderTimeOfDay() {
         const COLORS = {
             sleep: "hsl(260 10% 40%)",
             eat: "hsl(30 40% 60%)",
-            work: "hsl(200 10% 40%)",
+            work: "hsl(200 10% 50%)",
             // no rest time for them, sad
+            // besides, they can work during sleep/eat stages too
         };
         let svg = `<svg viewBox="0 0 24 1">`;
-        let activity = null;
+        let activity = 'sleep';
         for (let hour = 0; hour < 24; hour++) {
             let event = simulation.EVENT_TIMES_BY_HOUR[hour];
             if (event) activity = event;
@@ -897,6 +919,7 @@ const render = {
             }
         }
         ctx.restore();
+        // TODO: show the status effects
     },
 
     drawItems(where) {
@@ -946,6 +969,14 @@ const render = {
         }
 
         let html = ``;
+        html += tableHtml("Colonists", ["Colonist", "Pos", "Job", "Holding", "Dest", "Status"],
+                          simulation.colonists.map((colonist) => [
+                              colonist.id, colonist.pos,
+                              jobs.lookupColonist(colonist)?.id ?? '',
+                              itemStr(colonist.inventory),
+                              colonist.path?.[colonist.path?.length-1] ?? '',
+                              (colonist.status.sleepy ? 'sleepy ' : '') + (colonist.status.hungry ? 'hungry ' : ''),
+                          ]));
         html += tableHtml("Jobs", ["Job", "Room", "Item", "Colonist", "Time", "Dest"],
                           jobs.table.map(({id, type, room, colonist, item, timeCompleted, dest}) => [
                               `${id}:${type}`,
@@ -960,13 +991,6 @@ const render = {
                               [`${room.type} @ ${furniture}`, input?.type ?? '', status]));
         html += tableHtml("Items", ["Id", "Type", "Pos"],
                           map.items.map((item) => [item.id, item.type, itemPos(item)]));
-        html += tableHtml("Colonists", ["Colonist", "Pos", "Job", "Holding", "Dest"],
-                          simulation.colonists.map((colonist) => [
-                              colonist.id, colonist.pos,
-                              jobs.lookupColonist(colonist)?.id ?? '',
-                              itemStr(colonist.inventory),
-                              colonist.path?.[colonist.path?.length-1] ?? '',
-                          ]));
         debug.innerHTML = html;
     },
 
