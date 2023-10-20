@@ -4,6 +4,7 @@
   <div id="messages"></div>
   <div id="message-overlay"></div>
   <div id="game-instructions"></div>
+  <div id="time-of-day"></div>
   <div id="focus-instructions">Click game for keyboard focus</div>
   <details><summary>Debug:</summary><div id="debug"></div></details>
 </figure>
@@ -18,7 +19,7 @@
         display: grid;
         justify-content: center;
         grid-template-columns: 1fr;
-        grid-template-areas: "game" "status-bar" "message-area" "instructions";
+        grid-template-areas: "game" "time-of-day" "status-bar" "message-area" "instructions";
     }
 
     #game {
@@ -61,6 +62,13 @@
         align-self: center;
     }
 
+    #time-of-day {
+        grid-area: time-of-day;
+    }
+    #time-of-day svg {
+        display: block;
+    }
+    
     #messages, #message-overlay {
         grid-area: message-area;
         width: 100%;

@@ -628,6 +628,6 @@ Despite not having built a full game, I'm happy with how the project went. I kep
 
 <x:footer>
   Created 26 Jun 2023; &#160;
-  <!-- hhmts start -->Last modified: 15 Oct 2023<!-- hhmts end -->
+  <!-- hhmts start -->Last modified: 20 Oct 2023<!-- hhmts end -->
 </x:footer>
 #+end_export

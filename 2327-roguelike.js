@@ -214,7 +214,7 @@ class Colonist {
                 itemDrop(this, this.inventory);
                 jobs.deleteJob(job);
             } else if (!isItemPosOnGround(job.item.pos)) {
-                throw `Job ${job.id}: colonist ${job.colonist.id}, item ${job.item.id} should be on ground but is at ${job.item.pos.id}`;
+                throw `Job ${job.id}: colonist ${job.colonist?.id}, item ${job.item.id} should be on ground but is at ${job.item.pos?.id}`;
             } else if (this.pos.equals(job.item.pos)) {
                 // We are at the item, need to pick it up
                 itemPickUp(this, job.item);
@@ -266,6 +266,14 @@ class Colonist {
 
 const simulation = { // global
     TICKS_PER_SECOND: 10,
+    TICKS_PER_DAY: 600,
+    EVENT_TIMES_BY_HOUR: {
+        0: 'sleep',
+        6: 'eat', 7: 'work',
+        12: 'eat', 13: 'work',
+        18: 'eat', 19: 'work',
+        22: 'sleep',
+    },
     tickId: 1, // start from 1 because I also use this as a truthy value
     colonists: [],
     init() {
@@ -274,6 +282,12 @@ const simulation = { // global
                 this.colonists.push(new Colonist(Pos(x, y)));
             }
         }
+    },
+    get timeOfDay() {
+        return simulation.tickId % simulation.TICKS_PER_DAY;
+    },
+    get hour() {
+        return 24 * simulation.timeOfDay / simulation.TICKS_PER_DAY;
     },
     simulate() {
         this.tickId++;
@@ -636,6 +650,32 @@ function setMessage(str) {
     document.querySelector("#messages").textContent = str;
 }
 
+function renderTimeOfDay() {
+    let div = document.querySelector("#time-of-day");
+    if (!div.innerHTML) {
+        const COLORS = {
+            sleep: "hsl(260 10% 40%)",
+            eat: "hsl(30 40% 60%)",
+            work: "hsl(200 10% 40%)",
+            // no rest time for them, sad
+        };
+        let svg = `<svg viewBox="0 0 24 1">`;
+        let activity = null;
+        for (let hour = 0; hour < 24; hour++) {
+            let event = simulation.EVENT_TIMES_BY_HOUR[hour];
+            if (event) activity = event;
+            svg += `<rect x=${hour} width=1 height=1 fill="${COLORS[activity]}" />`;
+        }
+        svg += `<line y2=1 fill=none stroke=white stroke-width=0.1 />`;
+        svg += `</svg>`;
+        div.innerHTML = svg;
+    }
+    let time = simulation.hour;
+    let line = div.querySelector("line");
+    line.setAttribute('x1', time.toFixed(2));
+    line.setAttribute('x2', time.toFixed(2));
+}
+
 const render = {
     /** @type {null | Rect} */
     view: null,
@@ -646,6 +686,7 @@ const render = {
     highlightedRoom: null,
 
     begin() {
+        renderTimeOfDay();
         const halfwidth = camera.VIEWWIDTH / 2;
         const halfheight = camera.VIEWHEIGHT / 2;
 
@@ -1038,7 +1079,6 @@ const main = {
 
     room_onClick(event) {
         if (event.button !== 0) return; // left button only
-        let pos = camera.convertCanvasToWorldCoord(convertPixelToCanvasCoord(event));
         // Unlock the room if it's locked
         let room = unlockableRoomList(map).find((room) => positionInRoom(room, this.pointerState));
         if (!room) {
@@ -1110,7 +1150,7 @@ const main = {
         switch (this.uiMode) {
         case 'stopped':
             render.cursor = 'wait';
-            setMessage(`Click to focus`);
+            setMessage(`Paused. Click to resume.`);
             break;
         case 'view':
             render.cursor = 'move';
