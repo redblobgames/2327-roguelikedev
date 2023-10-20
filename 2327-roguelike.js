@@ -55,7 +55,7 @@ const roomCharacteristics = {
             output: 'rawfood',
             sprites: [{type: 'wheat', pos: Pos(0, 0)}],
         },
-      },
+    },
     dining: {
         furnitureShape: {
             name: "table",
@@ -906,17 +906,17 @@ const render = {
 
         let html = ``;
         html += tableHtml("Jobs", ["Job", "Room", "Item", "Colonist", "Time", "Dest"],
-                      jobs.table.map(({id, type, room, colonist, item, timeCompleted, dest}) => [
-                          `${id}:${type}`,
-                          room.type,
-                          itemStr(item) + " @ " + itemPos(item),
-                          colonist.id,
-                          timeCompleted === undefined? "-" : timeCompleted === null? "waiting" : (timeCompleted - simulation.tickId),
-                          dest,
-                      ]));
+                          jobs.table.map(({id, type, room, colonist, item, timeCompleted, dest}) => [
+                              `${id}:${type}`,
+                              room.type,
+                              itemStr(item) + " @ " + itemPos(item),
+                              colonist.id,
+                              timeCompleted === undefined? "-" : timeCompleted === null? "waiting" : (timeCompleted - simulation.tickId),
+                              dest,
+                          ]));
         html += tableHtml("Job unfulfilled", ["Room", "Input", "Status"],
-                      jobs.candidates.map(({room, furniture, input, status}) =>
-                          [`${room.type} @ ${furniture}`, input?.type ?? '', status]));
+                          jobs.candidates.map(({room, furniture, input, status}) =>
+                              [`${room.type} @ ${furniture}`, input?.type ?? '', status]));
         html += tableHtml("Items", ["Id", "Type", "Pos"],
                           map.items.map((item) => [item.id, item.type, itemPos(item)]));
         html += tableHtml("Colonists", ["Colonist", "Pos", "Job", "Holding", "Dest"],
