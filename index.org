@@ -1,4 +1,4 @@
-#+title: Summer Roguelike project
+#+title: 2023 Summer Roguelike project
 #+date: <2023-06-26 Mon>
 #+property: header-args:dot    :cache yes
 #+options: toc:nil
@@ -356,7 +356,7 @@ digraph {
 }
 #+end_src
 
-#+results:
+#+results[83ca86f595366b43e39626ba0bc705d0431f8c48]:
 [[file:build/furniture-state.png]]
 
 The colonist and item also have their own state transitions. *This is going to be tricky to implement*.
